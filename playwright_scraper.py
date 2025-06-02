@@ -111,8 +111,8 @@ class PlaywrightFanzaScraper:
                     await browser.close()
                     return products
                 
-                # 各商品の情報を取得
-                for element in product_elements[:20]:
+                # 各商品の情報を取得（最大100件まで確認）
+                for element in product_elements[:100]:
                     try:
                         # タイトル
                         title = ""
