@@ -1,10 +1,11 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
+from discord.ui import Button, View
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from typing import Dict
+from typing import Dict, List
 from playwright_scraper import FanzaScraper  # Playwright版を使用
 from config import (
     DISCORD_TOKEN, COMMAND_PREFIX, RATE_LIMIT_DURATION,
@@ -50,6 +51,90 @@ class FanzaEmbed(discord.Embed):
             self.set_image(url=product['image_url'])
         
         self.set_footer(text="FANZA セール情報")
+
+
+class PaginationView(View):
+    """ページネーション用のView"""
+    def __init__(self, products: List[dict], interaction: discord.Interaction, timeout: float = 180):
+        super().__init__(timeout=timeout)
+        self.products = products
+        self.interaction = interaction
+        self.current_page = 0
+        self.items_per_page = 5  # 1ページあたり5件
+        self.total_pages = (len(products) - 1) // self.items_per_page + 1
+        
+        # 初期ボタン状態を設定
+        self._update_buttons()
+    
+    def _update_buttons(self):
+        """ページに応じてボタンの有効/無効を切り替え"""
+        self.children[0].disabled = self.current_page == 0  # 前へボタン
+        self.children[1].disabled = self.current_page >= self.total_pages - 1  # 次へボタン
+    
+    def create_embed(self) -> discord.Embed:
+        """現在のページのEmbedを作成"""
+        start_idx = self.current_page * self.items_per_page
+        end_idx = min(start_idx + self.items_per_page, len(self.products))
+        current_products = self.products[start_idx:end_idx]
+        
+        embed = discord.Embed(
+            title=f"📋 FANZAセール 作品リスト (ページ {self.current_page + 1}/{self.total_pages})",
+            color=discord.Color.blue(),
+            timestamp=datetime.now()
+        )
+        
+        for i, product in enumerate(current_products, start=start_idx + 1):
+            rating_stars = scraper.format_rating_stars(product['rating'])
+            embed.add_field(
+                name=f"{i}. {product['title']}",
+                value=f"{rating_stars} ({product['rating']:.1f}) | {product['price']}\n[詳細を見る]({product['url']})",
+                inline=False
+            )
+        
+        embed.set_footer(text=f"ページ {self.current_page + 1}/{self.total_pages} | FANZA セール情報")
+        return embed
+    
+    @discord.ui.button(label="◀ 前へ", style=discord.ButtonStyle.primary, disabled=True)
+    async def previous_button(self, interaction: discord.Interaction, button: Button):
+        if interaction.user.id != self.interaction.user.id:
+            await interaction.response.send_message("このボタンは他の人のコマンドです。", ephemeral=True)
+            return
+        
+        self.current_page -= 1
+        self._update_buttons()
+        embed = self.create_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label="次へ ▶", style=discord.ButtonStyle.primary)
+    async def next_button(self, interaction: discord.Interaction, button: Button):
+        if interaction.user.id != self.interaction.user.id:
+            await interaction.response.send_message("このボタンは他の人のコマンドです。", ephemeral=True)
+            return
+        
+        self.current_page += 1
+        self._update_buttons()
+        embed = self.create_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label="🗑️ 閉じる", style=discord.ButtonStyle.danger)
+    async def close_button(self, interaction: discord.Interaction, button: Button):
+        if interaction.user.id != self.interaction.user.id:
+            await interaction.response.send_message("このボタンは他の人のコマンドです。", ephemeral=True)
+            return
+        
+        await interaction.response.edit_message(content="リストを閉じました。", embed=None, view=None)
+        self.stop()
+    
+    async def on_timeout(self):
+        """タイムアウト時の処理"""
+        # ボタンを無効化
+        for item in self.children:
+            item.disabled = True
+        
+        try:
+            await self.interaction.edit_original_response(view=self)
+        except:
+            pass
 
 
 @bot.event
@@ -196,8 +281,17 @@ async def fanza_sale(ctx):
 
 # スラッシュコマンド定義
 @bot.tree.command(name="fanza_sale", description="🎬 セール中の高評価AV作品(評価4.0以上)を表示")
-@app_commands.describe()
-async def slash_fanza_sale(interaction: discord.Interaction):
+@app_commands.describe(
+    mode="表示モード: 評価順（デフォルト）、ランダム、リスト形式"
+)
+@app_commands.choices(
+    mode=[
+        app_commands.Choice(name="🏆 評価順（デフォルト）", value="rating"),
+        app_commands.Choice(name="🎲 ランダム", value="random"),
+        app_commands.Choice(name="📋 リスト形式", value="list"),
+    ]
+)
+async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating"):
     """スラッシュコマンド版: FANZAのセール中高評価作品を表示"""
     
     # NSFWチェック
@@ -219,22 +313,47 @@ async def slash_fanza_sale(interaction: discord.Interaction):
             await interaction.followup.send("❌ 現在、評価4.0以上の商品が見つかりませんでした。", ephemeral=True)
             return
         
+        # モードに応じて処理
+        import random
+        
+        if mode == "random":
+            # ランダムモード: 商品をシャッフルして5件選択
+            products = random.sample(products, min(5, len(products)))
+            title = "🎲 FANZAセール ランダム作品"
+            description = f"ランダムに選ばれた高評価作品です (5件)"
+        elif mode == "list":
+            # リストモード: 簡易表示
+            title = "📋 FANZAセール 作品リスト"
+            description = f"現在セール中の高評価作品一覧 ({len(products)}件)"
+        else:
+            # 評価順モード（デフォルト）- 最初の5件のみ表示
+            title = "🎬 FANZAセール 高評価作品TOP5"
+            description = f"現在セール中の評価4.0以上の作品です (表示: 5件 / 全{len(products)}件)"
+            products = products[:5]  # 評価順とランダムモードは5件に制限
+        
         # ヘッダーメッセージ
         header_embed = discord.Embed(
-            title="🎬 FANZAセール 高評価作品TOP5",
-            description=f"現在セール中の評価4.0以上の作品です ({len(products)}件)",
+            title=title,
+            description=description,
             color=discord.Color.gold(),
             timestamp=datetime.now()
         )
         header_embed.set_thumbnail(url="https://i.imgur.com/fanza_logo.png")
         await interaction.followup.send(embed=header_embed)
         
-        # 各商品を表示
-        for i, product in enumerate(products, 1):
-            embed = FanzaEmbed(product)
-            embed.title = f"{i}. {embed.title}"
-            await interaction.followup.send(embed=embed)
-            await asyncio.sleep(0.5)
+        # モードに応じた表示
+        if mode == "list":
+            # リスト形式: ページネーション付きで表示
+            view = PaginationView(products, interaction)
+            embed = view.create_embed()
+            await interaction.followup.send(embed=embed, view=view)
+        else:
+            # 通常形式: 個別のEmbedで表示
+            for i, product in enumerate(products, 1):
+                embed = FanzaEmbed(product)
+                embed.title = f"{i}. {embed.title}"
+                await interaction.followup.send(embed=embed)
+                await asyncio.sleep(0.5)
         
         # フッターメッセージ
         footer_embed = discord.Embed(
@@ -270,7 +389,7 @@ async def slash_help(interaction: discord.Interaction):
     )
     embed.add_field(
         name="🎯 `/fanza_sale`",
-        value="セール中の高評価作品（評価4.0以上）を最大5件表示\n**推奨コマンド**",
+        value="セール中の高評価作品（評価4.0以上）を最大5件表示\n**推奨コマンド**\n\n**オプション:**\n• 🏆 評価順（デフォルト）\n• 🎲 ランダム\n• 📋 リスト形式",
         inline=True
     )
     embed.add_field(
