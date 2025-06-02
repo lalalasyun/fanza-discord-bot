@@ -76,7 +76,7 @@ class PaginationView(View):
         """ページに応じてボタンの有効/無効を切り替え"""
         # childrenからボタンを取得して更新
         for item in self.children:
-            if isinstance(item, Button):
+            if isinstance(item, discord.ui.Button):
                 if item.label == "◀ 前へ":
                     item.disabled = self.current_page == 0
                 elif item.label == "次へ ▶":
