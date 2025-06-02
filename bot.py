@@ -45,6 +45,10 @@ class FanzaEmbed(discord.Embed):
         if product['url']:
             self.add_field(name="詳細", value=f"[商品ページを見る]({product['url']})", inline=False)
         
+        # 商品画像を設定
+        if product.get('image_url'):
+            self.set_image(url=product['image_url'])
+        
         self.set_footer(text="FANZA セール情報")
 
 

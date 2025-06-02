@@ -165,15 +165,37 @@ class PlaywrightFanzaScraper:
                             if 'セール' in discount_text:
                                 discount = "セール中"
                         
+                        # 商品画像URL
+                        image_url = ""
+                        image_selectors = [
+                            "img[data-e2eid='content-image']",
+                            "img[src*='pics.dmm.co.jp']",
+                            "img[src*='dmm.com']",
+                            "img[alt*='パッケージ']",
+                            "div[data-e2eid='content-image'] img",
+                            "picture img",
+                            "img[loading='lazy']"
+                        ]
+                        for selector in image_selectors:
+                            img_elem = await element.query_selector(selector)
+                            if img_elem:
+                                image_url = await img_elem.get_attribute('src')
+                                if image_url and ('dmm' in image_url or 'pics' in image_url):
+                                    # 高解像度版に変換
+                                    if 'ps.jpg' in image_url:
+                                        image_url = image_url.replace('ps.jpg', 'pl.jpg')
+                                    break
+                        
                         # 評価が基準以上の商品のみ追加
                         if rating >= MIN_RATING:
                             products.append({
                                 'title': title[:50] + '...' if len(title) > 50 else title,
                                 'rating': rating,
                                 'price': price,
-                                'url': url
+                                'url': url,
+                                'image_url': image_url
                             })
-                            logger.info(f"Added product: {title[:30]}... (Rating: {rating})")
+                            logger.info(f"Added product: {title[:30]}... (Rating: {rating}, Image: {bool(image_url)})")
                         
                     except Exception as e:
                         logger.error(f"Error parsing product element: {e}")
