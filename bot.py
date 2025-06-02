@@ -10,7 +10,7 @@ from playwright_scraper import FanzaScraper  # Playwright版を使用
 from config import (
     DISCORD_TOKEN, COMMAND_PREFIX, RATE_LIMIT_DURATION,
     LOG_LEVEL, LOG_FORMAT, SALE_TYPES, get_sale_url,
-    ITEMS_PER_PAGE, MAX_DISPLAY_PAGES
+    ITEMS_PER_PAGE, MAX_DISPLAY_PAGES, DISABLE_RATE_LIMIT
 )
 
 # ログ設定
@@ -202,6 +202,10 @@ def check_nsfw_channel():
 def check_rate_limit():
     """レート制限をチェックするデコレータ"""
     async def predicate(ctx):
+        # 開発環境でレート制限が無効の場合はスキップ
+        if DISABLE_RATE_LIMIT:
+            return True
+            
         user_id = ctx.author.id
         now = datetime.now()
         
@@ -230,6 +234,10 @@ async def check_nsfw_interaction(interaction: discord.Interaction) -> bool:
 
 async def check_rate_limit_interaction(interaction: discord.Interaction) -> bool:
     """インタラクション用レート制限チェック"""
+    # 開発環境でレート制限が無効の場合はスキップ
+    if DISABLE_RATE_LIMIT:
+        return True
+        
     user_id = interaction.user.id
     now = datetime.now()
     

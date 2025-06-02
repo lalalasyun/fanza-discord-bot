@@ -56,6 +56,7 @@ CACHE_DURATION = 3600  # 1時間（秒）
 
 # レート制限設定
 RATE_LIMIT_DURATION = 300  # 5分（秒）
+DISABLE_RATE_LIMIT = os.getenv("DISABLE_RATE_LIMIT", "false").lower() == "true"  # 開発環境でのレート制限無効化
 
 # ユーザーエージェント
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"

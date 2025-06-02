@@ -78,7 +78,14 @@ sudo apt install -y libnss3 libnspr4 libasound2t64
 cp .env.example .env
 # .envファイルを編集
 DISCORD_TOKEN=YOUR_BOT_TOKEN_HERE
+
+# 開発環境設定（オプション）
+DISABLE_RATE_LIMIT=true  # 開発時のレート制限を無効化
 ```
+
+**開発環境での設定:**
+- `DISABLE_RATE_LIMIT=true` - レート制限を無効化（開発・テスト用）
+- `DISABLE_RATE_LIMIT=false` または未設定 - レート制限を有効化（本番用）
 
 ### 5. Botの起動
 ```bash
