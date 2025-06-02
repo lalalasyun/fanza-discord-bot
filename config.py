@@ -8,7 +8,43 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 COMMAND_PREFIX = "!"
 
 # FANZAスクレイピング設定
-FANZA_SALE_URL = "https://video.dmm.co.jp/av/list/?key=%E6%9C%9F%E9%96%93%E9%99%90%E5%AE%9A%E3%82%BB%E3%83%BC%E3%83%AB|20%EF%BC%85OFF|30%EF%BC%85OFF|50%EF%BC%85OFF|70%EF%BC%85OFF|%E6%97%A5%E6%9B%BF%E3%82%8F%E3%82%8A%E3%82%BB%E3%83%BC%E3%83%AB|10%E5%86%86%E3%82%BB%E3%83%BC%E3%83%AB|100%E5%86%86%E3%82%BB%E3%83%BC%E3%83%AB&sort=review_rank"
+FANZA_BASE_URL = "https://video.dmm.co.jp/av/list/"
+FANZA_SORT = "review_rank"
+
+# セールタイプの定義
+SALE_TYPES = {
+    "all": {
+        "name": "🎯 全てのセール",
+        "keys": ["期間限定セール", "20％OFF", "30％OFF", "50％OFF", "70％OFF", "日替わりセール", "10円セール", "100円セール"]
+    },
+    "limited": {
+        "name": "⏰ 期間限定セール",
+        "keys": ["期間限定セール"]
+    },
+    "percent": {
+        "name": "💸 割引セール (20-70% OFF)",
+        "keys": ["20％OFF", "30％OFF", "50％OFF", "70％OFF"]
+    },
+    "daily": {
+        "name": "📅 日替わりセール",
+        "keys": ["日替わりセール"]
+    },
+    "cheap": {
+        "name": "💴 激安セール (10円/100円)",
+        "keys": ["10円セール", "100円セール"]
+    }
+}
+
+# デフォルトのセールURL（全てのセール）
+FANZA_SALE_URL = f"{FANZA_BASE_URL}?key={'|'.join(SALE_TYPES['all']['keys'])}&sort={FANZA_SORT}"
+
+def get_sale_url(sale_type: str = "all") -> str:
+    """セールタイプに応じたURLを生成"""
+    if sale_type not in SALE_TYPES:
+        sale_type = "all"
+    
+    keys = SALE_TYPES[sale_type]["keys"]
+    return f"{FANZA_BASE_URL}?key={'|'.join(keys)}&sort={FANZA_SORT}"
 MIN_RATING = 4.0
 MAX_ITEMS = 50  # キャッシュする最大商品数（10ページ × 5件）
 # 表示設定
