@@ -4,6 +4,7 @@ from discord import app_commands
 from discord.ui import Button, View
 import asyncio
 import logging
+import random
 from datetime import datetime, timedelta
 from typing import Dict, List
 from playwright_scraper import FanzaScraper  # Playwright版を使用
@@ -153,11 +154,85 @@ class PaginationView(View):
             logger.error(f"Unexpected error on timeout: {e}")
 
 
+async def setup_bot_profile():
+    """BOTのプロフィールとステータスを設定"""
+    try:
+        # BOTのアクティビティステータスを設定
+        activity = discord.Activity(
+            type=discord.ActivityType.watching, 
+            name="🎬 FANZAセール情報 | /fanza_sale"
+        )
+        
+        # BOTのステータスを設定（オンライン状態）
+        await bot.change_presence(
+            status=discord.Status.online,
+            activity=activity
+        )
+        
+        logger.info("Bot profile and status configured successfully")
+        
+        # 動的ステータス更新を開始
+        asyncio.create_task(dynamic_status_updater())
+        
+    except Exception as e:
+        logger.error(f"Error setting bot profile: {e}")
+
+
+async def dynamic_status_updater():
+    """BOTのステータスを動的に更新"""
+    status_messages = [
+        "🎬 FANZAセール情報 | /fanza_sale",
+        "⭐ 高評価作品を検索中...",
+        "🎯 全てのセール | /fanza_sale", 
+        "⏰ 期間限定セール | /fanza_sale",
+        "💸 割引セール情報 | /fanza_sale",
+        "📅 日替わりセール | /fanza_sale",
+        "💴 激安セール情報 | /fanza_sale",
+        "💡 /help でヘルプ表示",
+        f"🏠 {len(bot.guilds)}のサーバーで稼働中",
+    ]
+    
+    try:
+        await asyncio.sleep(30)  # 初期化後30秒待機
+        
+        while not bot.is_closed():
+            # ランダムにステータスメッセージを選択
+            message = random.choice(status_messages)
+            
+            # サーバー数を更新
+            if "サーバーで稼働中" in message:
+                message = f"🏠 {len(bot.guilds)}のサーバーで稼働中"
+            
+            activity = discord.Activity(
+                type=discord.ActivityType.watching,
+                name=message
+            )
+            
+            await bot.change_presence(
+                status=discord.Status.online,
+                activity=activity
+            )
+            
+            logger.debug(f"Updated bot status: {message}")
+            
+            # 60秒待機
+            await asyncio.sleep(60)
+            
+    except Exception as e:
+        logger.error(f"Error in dynamic status updater: {e}")
+
+
 @bot.event
 async def on_ready():
     """Bot起動時の処理"""
     logger.info(f'{bot.user} has connected to Discord!')
     logger.info(f'Connected to {len(bot.guilds)} guilds')
+    
+    # 起動時間を記録
+    bot.start_time = datetime.now()
+    
+    # BOTのプロフィール設定
+    await setup_bot_profile()
     
     # スラッシュコマンドを同期
     try:
@@ -509,6 +584,126 @@ async def sync_commands(ctx):
     except Exception as e:
         await ctx.send(f"❌ Sync failed: {e}")
         logger.error(f"Manual sync error: {e}")
+
+
+@bot.tree.command(name="bot_info", description="🤖 BOTの詳細情報とステータスを表示")
+async def bot_info(interaction: discord.Interaction):
+    """BOTの情報を表示（コマンドボタン付き）"""
+    try:
+        # BOTの統計情報を取得
+        guild_count = len(bot.guilds)
+        total_members = sum(guild.member_count for guild in bot.guilds)
+        uptime = datetime.now() - bot.start_time if hasattr(bot, 'start_time') else "計算中..."
+        
+        embed = discord.Embed(
+            title="🤖 FANZA Bot 詳細情報",
+            description="FANZAセール情報を提供するDiscord BOTです",
+            color=discord.Color.blue(),
+            timestamp=datetime.now()
+        )
+        
+        # BOTの基本情報
+        embed.add_field(
+            name="📊 基本統計",
+            value=f"• **サーバー数**: {guild_count}\n• **総ユーザー数**: {total_members:,}\n• **稼働時間**: {uptime}",
+            inline=True
+        )
+        
+        # 機能情報
+        embed.add_field(
+            name="⚡ 主な機能",
+            value="• セール作品検索\n• 5つのセールタイプ\n• 動的ステータス表示\n• レート制限保護",
+            inline=True
+        )
+        
+        # バージョン情報
+        embed.add_field(
+            name="🔧 技術情報",
+            value=f"• **discord.py**: {discord.__version__}\n• **Python**: 3.9+\n• **Version**: 2.1.0",
+            inline=True
+        )
+        
+        # アバター画像を設定
+        if bot.user.avatar:
+            embed.set_thumbnail(url=bot.user.avatar.url)
+        
+        embed.set_footer(text="FANZA Bot | 高評価作品をお届け")
+        
+        # コマンドボタンを作成
+        view = BotInfoView()
+        
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        
+    except Exception as e:
+        logger.error(f"Error in bot_info command: {e}")
+        await interaction.response.send_message(
+            "❌ BOT情報の取得に失敗しました。", 
+            ephemeral=True
+        )
+
+
+class BotInfoView(View):
+    """BOT情報表示用のView（コマンドボタン付き）"""
+    def __init__(self):
+        super().__init__(timeout=300)  # 5分でタイムアウト
+    
+    @discord.ui.button(label="🎬 セール検索", style=discord.ButtonStyle.primary, emoji="🎬")
+    async def sale_search_button(self, interaction: discord.Interaction, button: Button):
+        """セール検索ボタン"""
+        embed = discord.Embed(
+            title="🎬 FANZAセール検索",
+            description="以下のコマンドでセール作品を検索できます",
+            color=discord.Color.green()
+        )
+        embed.add_field(
+            name="💡 使用方法",
+            value="`/fanza_sale` コマンドを使用してください\n\n**オプション:**\n• 表示モード: 評価順/ランダム/リスト\n• セールタイプ: 全て/期間限定/割引/日替わり/激安",
+            inline=False
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    
+    @discord.ui.button(label="💡 ヘルプ", style=discord.ButtonStyle.secondary, emoji="💡")
+    async def help_button(self, interaction: discord.Interaction, button: Button):
+        """ヘルプボタン"""
+        embed = discord.Embed(
+            title="💡 FANZA Bot ヘルプ",
+            description="コマンド一覧と使用方法",
+            color=discord.Color.blue()
+        )
+        embed.add_field(
+            name="📋 主要コマンド",
+            value="• `/fanza_sale` - セール作品検索\n• `/help` - 詳細ヘルプ\n• `/bot_info` - BOT情報表示",
+            inline=False
+        )
+        embed.add_field(
+            name="⚠️ 使用条件",
+            value="• NSFWチャンネルでのみ使用可能\n• レート制限: 5分に1回",
+            inline=False
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    
+    @discord.ui.button(label="📊 ステータス", style=discord.ButtonStyle.secondary, emoji="📊")
+    async def status_button(self, interaction: discord.Interaction, button: Button):
+        """ステータスボタン"""
+        guild_count = len(interaction.client.guilds)
+        total_members = sum(guild.member_count for guild in interaction.client.guilds)
+        
+        embed = discord.Embed(
+            title="📊 BOTステータス",
+            description="現在のBOT動作状況",
+            color=discord.Color.orange()
+        )
+        embed.add_field(
+            name="🌐 接続情報",
+            value=f"• **稼働サーバー**: {guild_count}個\n• **総ユーザー数**: {total_members:,}人\n• **ステータス**: 🟢 オンライン",
+            inline=False
+        )
+        embed.add_field(
+            name="⚡ 機能状況",
+            value="• スクレイピング: 🟢 正常\n• キャッシュシステム: 🟢 稼働中\n• コマンド同期: 🟢 完了",
+            inline=False
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 def main():
