@@ -56,8 +56,18 @@ async def on_ready():
     
     # スラッシュコマンドを同期
     try:
+        # グローバル同期
         synced = await bot.tree.sync()
-        logger.info(f'Synced {len(synced)} slash commands')
+        logger.info(f'Synced {len(synced)} global slash commands')
+        
+        # 各ギルドでも同期
+        for guild in bot.guilds:
+            try:
+                guild_synced = await bot.tree.sync(guild=guild)
+                logger.info(f'Synced {len(guild_synced)} slash commands for guild: {guild.name}')
+            except Exception as e:
+                logger.error(f'Failed to sync for guild {guild.name}: {e}')
+                
     except Exception as e:
         logger.error(f'Failed to sync slash commands: {e}')
 
@@ -181,7 +191,8 @@ async def fanza_sale(ctx):
 
 
 # スラッシュコマンド定義
-@bot.tree.command(name="fanza_sale", description="セール中の高評価AV作品を表示します")
+@bot.tree.command(name="fanza_sale", description="🎬 セール中の高評価AV作品(評価4.0以上)を表示")
+@app_commands.describe()
 async def slash_fanza_sale(interaction: discord.Interaction):
     """スラッシュコマンド版: FANZAのセール中高評価作品を表示"""
     
@@ -194,24 +205,25 @@ async def slash_fanza_sale(interaction: discord.Interaction):
         return
     
     try:
-        # 処理中メッセージ
-        await interaction.response.send_message("セール情報を取得中... 🔍")
+        # 処理中メッセージ（defer で3秒の猶予を確保）
+        await interaction.response.defer()
         
         # 商品情報を取得
         products = await scraper.get_high_rated_products()
         
         if not products:
-            await interaction.edit_original_response(content="高評価の商品が見つかりませんでした。")
+            await interaction.followup.send("❌ 現在、評価4.0以上の商品が見つかりませんでした。", ephemeral=True)
             return
         
         # ヘッダーメッセージ
         header_embed = discord.Embed(
             title="🎬 FANZAセール 高評価作品TOP5",
-            description="現在セール中の評価4.0以上の作品です",
+            description=f"現在セール中の評価4.0以上の作品です ({len(products)}件)",
             color=discord.Color.gold(),
             timestamp=datetime.now()
         )
-        await interaction.edit_original_response(content=None, embed=header_embed)
+        header_embed.set_thumbnail(url="https://i.imgur.com/fanza_logo.png")
+        await interaction.followup.send(embed=header_embed)
         
         # 各商品を表示
         for i, product in enumerate(products, 1):
@@ -222,7 +234,7 @@ async def slash_fanza_sale(interaction: discord.Interaction):
         
         # フッターメッセージ
         footer_embed = discord.Embed(
-            description="※価格は変動する可能性があります",
+            description="💡 スラッシュコマンド `/help` でヘルプを表示\n⚠️ 価格は変動する可能性があります",
             color=discord.Color.greyple()
         )
         footer_embed.set_footer(text=f"取得時刻: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -230,36 +242,61 @@ async def slash_fanza_sale(interaction: discord.Interaction):
         
     except Exception as e:
         logger.error(f"Error in slash fanza_sale command: {e}")
-        if not interaction.response.is_done():
-            await interaction.response.send_message("エラーが発生しました。管理者にお問い合わせください。", ephemeral=True)
-        else:
-            await interaction.followup.send("エラーが発生しました。管理者にお問い合わせください。", ephemeral=True)
+        try:
+            await interaction.followup.send("❌ エラーが発生しました。しばらく時間をおいてから再試行してください。", ephemeral=True)
+        except:
+            pass
 
 
-@bot.tree.command(name="help", description="FANZA Botの使用方法を表示します")
+@bot.tree.command(name="help", description="💡 FANZA Botの使用方法とコマンド一覧を表示")
 async def slash_help(interaction: discord.Interaction):
     """スラッシュコマンド版: ヘルプ"""
     embed = discord.Embed(
-        title="FANZA Bot ヘルプ",
-        description="FANZAのセール情報を取得するBotです",
-        color=discord.Color.blue()
+        title="🤖 FANZA Bot ヘルプ",
+        description="FANZAのセール情報から高評価作品を取得するBotです",
+        color=discord.Color.blue(),
+        timestamp=datetime.now()
     )
+    
+    # コマンド説明
     embed.add_field(
-        name="`/fanza_sale`",
-        value="セール中の高評価作品（評価4.0以上）を最大5件表示します",
+        name="📋 コマンド一覧",
+        value="",
         inline=False
     )
     embed.add_field(
-        name="`!fanza_sale`",
-        value="プレフィックスコマンド版（レガシー対応）",
-        inline=False
+        name="🎯 `/fanza_sale`",
+        value="セール中の高評価作品（評価4.0以上）を最大5件表示\n**推奨コマンド**",
+        inline=True
     )
     embed.add_field(
-        name="使用条件",
-        value="• NSFWチャンネルでのみ使用可能\n• 5分に1回のレート制限あり",
+        name="💡 `/help`",
+        value="このヘルプメッセージを表示\n（あなただけに見えます）",
+        inline=True
+    )
+    embed.add_field(
+        name="🔧 `!fanza_sale`",
+        value="プレフィックス版コマンド\n（レガシー対応）",
+        inline=True
+    )
+    
+    # 使用条件
+    embed.add_field(
+        name="⚠️ 使用条件",
+        value="• **NSFWチャンネル**でのみ使用可能\n• **5分に1回**のレート制限あり\n• 18歳未満の使用は禁止",
         inline=False
     )
-    embed.set_footer(text="FANZA Bot v2.0 - スラッシュコマンド対応")
+    
+    # 機能説明
+    embed.add_field(
+        name="✨ 機能",
+        value="• 動的スクレイピング（最新情報）\n• キャッシュシステム（1時間）\n• 高評価作品のフィルタリング",
+        inline=False
+    )
+    
+    embed.set_footer(text="FANZA Bot v2.0 | スラッシュコマンド対応")
+    embed.set_thumbnail(url="https://cdn.discordapp.com/embed/avatars/0.png")
+    
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
@@ -288,6 +325,25 @@ async def help_fanza(ctx):
     )
     embed.set_footer(text="FANZA Bot v2.0 - スラッシュコマンド対応")
     await ctx.send(embed=embed)
+
+
+@bot.command(name='sync')
+@commands.is_owner()
+async def sync_commands(ctx):
+    """スラッシュコマンドを手動同期（オーナー専用）"""
+    try:
+        # グローバル同期
+        synced = await bot.tree.sync()
+        await ctx.send(f"✅ {len(synced)} global slash commands synced")
+        
+        # ギルド同期
+        if ctx.guild:
+            guild_synced = await bot.tree.sync(guild=ctx.guild)
+            await ctx.send(f"✅ {len(guild_synced)} guild slash commands synced for {ctx.guild.name}")
+            
+    except Exception as e:
+        await ctx.send(f"❌ Sync failed: {e}")
+        logger.error(f"Manual sync error: {e}")
 
 
 def main():
