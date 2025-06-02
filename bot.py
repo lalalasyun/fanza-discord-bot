@@ -9,7 +9,8 @@ from typing import Dict, List
 from playwright_scraper import FanzaScraper  # Playwright版を使用
 from config import (
     DISCORD_TOKEN, COMMAND_PREFIX, RATE_LIMIT_DURATION,
-    LOG_LEVEL, LOG_FORMAT, SALE_TYPES, get_sale_url
+    LOG_LEVEL, LOG_FORMAT, SALE_TYPES, get_sale_url,
+    ITEMS_PER_PAGE, MAX_DISPLAY_PAGES
 )
 
 # ログ設定
@@ -60,16 +61,27 @@ class PaginationView(View):
         self.products = products
         self.interaction = interaction
         self.current_page = 0
-        self.items_per_page = 5  # 1ページあたり5件
+        self.items_per_page = ITEMS_PER_PAGE  # configから読み込み
         self.total_pages = (len(products) - 1) // self.items_per_page + 1
+        self.max_pages = MAX_DISPLAY_PAGES  # 最大ページ数の制限
+        
+        # 最大ページ数を超える場合は制限する
+        if self.total_pages > self.max_pages:
+            self.total_pages = self.max_pages
+            self.products = self.products[:self.max_pages * self.items_per_page]
         
         # 初期ボタン状態を設定
         self._update_buttons()
     
     def _update_buttons(self):
         """ページに応じてボタンの有効/無効を切り替え"""
-        self.children[0].disabled = self.current_page == 0  # 前へボタン
-        self.children[1].disabled = self.current_page >= self.total_pages - 1  # 次へボタン
+        # childrenからボタンを取得して更新
+        for item in self.children:
+            if isinstance(item, discord.ui.Button):
+                if item.label == "◀ 前へ":
+                    item.disabled = self.current_page == 0
+                elif item.label == "次へ ▶":
+                    item.disabled = self.current_page >= self.total_pages - 1
     
     def create_embed(self) -> discord.Embed:
         """現在のページのEmbedを作成"""
@@ -133,8 +145,12 @@ class PaginationView(View):
         
         try:
             await self.interaction.edit_original_response(view=self)
-        except:
-            pass
+        except discord.NotFound:
+            logger.warning("Interaction message not found on timeout.")
+        except discord.HTTPException as e:
+            logger.error(f"Failed to edit message on timeout: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error on timeout: {e}")
 
 
 @bot.event
@@ -381,8 +397,12 @@ async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating
         logger.error(f"Error in slash fanza_sale command: {e}")
         try:
             await interaction.followup.send("❌ エラーが発生しました。しばらく時間をおいてから再試行してください。", ephemeral=True)
-        except:
-            pass
+        except discord.NotFound:
+            logger.warning("Failed to send error message: interaction not found.")
+        except discord.HTTPException as e:
+            logger.error(f"Failed to send error message: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error sending error message: {e}")
 
 
 @bot.tree.command(name="help", description="💡 FANZA Botの使用方法とコマンド一覧を表示")
