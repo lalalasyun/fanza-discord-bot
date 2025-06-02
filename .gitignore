@@ -43,3 +43,13 @@ debug_*.png
 test-results/
 playwright-report/
 playwright/.cache/
+
+# WSL運用ファイル（本番環境専用）
+fanza-bot.service
+start_bot.sh
+stop_bot.sh
+update_bot.sh
+test_wsl.py
+README_WSL.md
+bot.log
+update.log
