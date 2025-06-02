@@ -51,5 +51,6 @@ stop_bot.sh
 update_bot.sh
 test_wsl.py
 README_WSL.md
+ENV_SETUP.md
 bot.log
 update.log
