@@ -18,6 +18,8 @@ class PlaywrightFanzaScraper:
     def __init__(self):
         self.cache = {}
         self.cache_timestamp = None
+        self.cache_by_type = {}  # セールタイプ別のキャッシュ
+        self.cache_timestamp_by_type = {}  # セールタイプ別のタイムスタンプ
 
     def parse_rating(self, rating_text: str) -> float:
         """評価テキストから数値を抽出"""
@@ -37,23 +39,27 @@ class PlaywrightFanzaScraper:
         
         return "★" * full_stars + "☆" * half_star + "☆" * empty_stars
 
-    async def get_high_rated_products(self) -> List[Dict[str, any]]:
+    async def get_high_rated_products(self, url: str = None, sale_type: str = "all") -> List[Dict[str, any]]:
         """高評価商品を取得（キャッシュ機能付き）"""
-        # キャッシュチェック
-        if self.cache_timestamp and self.cache:
-            if datetime.now() - self.cache_timestamp < timedelta(seconds=CACHE_DURATION):
-                logger.info("Returning cached data")
-                return self.cache
+        # URLが指定されていない場合はデフォルトURL
+        if not url:
+            url = FANZA_SALE_URL
+        
+        # セールタイプ別のキャッシュチェック
+        if sale_type in self.cache_timestamp_by_type and sale_type in self.cache_by_type:
+            if datetime.now() - self.cache_timestamp_by_type[sale_type] < timedelta(seconds=CACHE_DURATION):
+                logger.info(f"Returning cached data for sale_type: {sale_type}")
+                return self.cache_by_type[sale_type]
         
         # 新規取得
-        products = await self.scrape_products()
+        products = await self.scrape_products(url)
         if products:
-            self.cache = products
-            self.cache_timestamp = datetime.now()
+            self.cache_by_type[sale_type] = products
+            self.cache_timestamp_by_type[sale_type] = datetime.now()
         
         return products
 
-    async def scrape_products(self) -> List[Dict[str, any]]:
+    async def scrape_products(self, url: str) -> List[Dict[str, any]]:
         """実際のスクレイピング処理"""
         products = []
         
@@ -73,8 +79,8 @@ class PlaywrightFanzaScraper:
                 page = await context.new_page()
                 
                 # ページにアクセス
-                logger.info(f"Accessing URL: {FANZA_SALE_URL}")
-                await page.goto(FANZA_SALE_URL, wait_until='networkidle')
+                logger.info(f"Accessing URL: {url}")
+                await page.goto(url, wait_until='networkidle')
                 
                 # 年齢認証の処理
                 try:
@@ -220,9 +226,9 @@ class FanzaScraper:
     def __init__(self):
         self.playwright_scraper = PlaywrightFanzaScraper()
     
-    async def get_high_rated_products(self) -> List[Dict[str, any]]:
+    async def get_high_rated_products(self, url: str = None, sale_type: str = "all") -> List[Dict[str, any]]:
         """高評価商品を取得"""
-        return await self.playwright_scraper.get_high_rated_products()
+        return await self.playwright_scraper.get_high_rated_products(url=url, sale_type=sale_type)
     
     def format_rating_stars(self, rating: float) -> str:
         """評価を星マークで表現"""

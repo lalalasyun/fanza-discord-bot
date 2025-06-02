@@ -9,7 +9,8 @@ from typing import Dict, List
 from playwright_scraper import FanzaScraper  # Playwright版を使用
 from config import (
     DISCORD_TOKEN, COMMAND_PREFIX, RATE_LIMIT_DURATION,
-    LOG_LEVEL, LOG_FORMAT, ITEMS_PER_PAGE, MAX_DISPLAY_PAGES
+    LOG_LEVEL, LOG_FORMAT, SALE_TYPES, get_sale_url,
+    ITEMS_PER_PAGE, MAX_DISPLAY_PAGES
 )
 
 # ログ設定
@@ -297,16 +298,24 @@ async def fanza_sale(ctx):
 # スラッシュコマンド定義
 @bot.tree.command(name="fanza_sale", description="🎬 セール中の高評価AV作品(評価4.0以上)を表示")
 @app_commands.describe(
-    mode="表示モード: 評価順（デフォルト）、ランダム、リスト形式"
+    mode="表示モード: 評価順（デフォルト）、ランダム、リスト形式",
+    sale_type="セールタイプ: 全て、期間限定、割引、日替わり、激安"
 )
 @app_commands.choices(
     mode=[
         app_commands.Choice(name="🏆 評価順（デフォルト）", value="rating"),
         app_commands.Choice(name="🎲 ランダム", value="random"),
         app_commands.Choice(name="📋 リスト形式", value="list"),
+    ],
+    sale_type=[
+        app_commands.Choice(name="🎯 全てのセール", value="all"),
+        app_commands.Choice(name="⏰ 期間限定セール", value="limited"),
+        app_commands.Choice(name="💸 割引セール (20-70% OFF)", value="percent"),
+        app_commands.Choice(name="📅 日替わりセール", value="daily"),
+        app_commands.Choice(name="💴 激安セール (10円/100円)", value="cheap"),
     ]
 )
-async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating"):
+async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating", sale_type: str = "all"):
     """スラッシュコマンド版: FANZAのセール中高評価作品を表示"""
     
     # NSFWチェック
@@ -321,12 +330,18 @@ async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating
         # 処理中メッセージ（defer で3秒の猶予を確保）
         await interaction.response.defer()
         
+        # セールタイプに応じたURLを生成
+        url = get_sale_url(sale_type)
+        
         # 商品情報を取得
-        products = await scraper.get_high_rated_products()
+        products = await scraper.get_high_rated_products(url=url, sale_type=sale_type)
         
         if not products:
             await interaction.followup.send("❌ 現在、評価4.0以上の商品が見つかりませんでした。", ephemeral=True)
             return
+        
+        # セールタイプの表示名を取得
+        sale_type_name = SALE_TYPES.get(sale_type, {}).get("name", "🎯 全てのセール")
         
         # モードに応じて処理
         import random
@@ -334,15 +349,15 @@ async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating
         if mode == "random":
             # ランダムモード: 商品をシャッフルして5件選択
             products = random.sample(products, min(5, len(products)))
-            title = "🎲 FANZAセール ランダム作品"
+            title = f"🎲 FANZAセール ランダム作品 - {sale_type_name}"
             description = f"ランダムに選ばれた高評価作品です (5件)"
         elif mode == "list":
             # リストモード: 簡易表示
-            title = "📋 FANZAセール 作品リスト"
+            title = f"📋 FANZAセール 作品リスト - {sale_type_name}"
             description = f"現在セール中の高評価作品一覧 ({len(products)}件)"
         else:
             # 評価順モード（デフォルト）- 最初の5件のみ表示
-            title = "🎬 FANZAセール 高評価作品TOP5"
+            title = f"🎬 FANZAセール 高評価作品TOP5 - {sale_type_name}"
             description = f"現在セール中の評価4.0以上の作品です (表示: 5件 / 全{len(products)}件)"
             products = products[:5]  # 評価順とランダムモードは5件に制限
         
@@ -408,7 +423,7 @@ async def slash_help(interaction: discord.Interaction):
     )
     embed.add_field(
         name="🎯 `/fanza_sale`",
-        value="セール中の高評価作品（評価4.0以上）を最大5件表示\n**推奨コマンド**\n\n**オプション:**\n• 🏆 評価順（デフォルト）\n• 🎲 ランダム\n• 📋 リスト形式",
+        value="セール中の高評価作品（評価4.0以上）を最大5件表示\n**推奨コマンド**\n\n**表示モード:**\n• 🏆 評価順（デフォルト）\n• 🎲 ランダム\n• 📋 リスト形式\n\n**セールタイプ:**\n• 🎯 全て（デフォルト）\n• ⏰ 期間限定\n• 💸 割引セール\n• 📅 日替わり\n• 💴 激安セール",
         inline=True
     )
     embed.add_field(
