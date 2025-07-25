@@ -14,7 +14,8 @@ from missav_scraper import MissAVScraper  # MissAV検索機能
 from config import (
     DISCORD_TOKEN, COMMAND_PREFIX, RATE_LIMIT_DURATION,
     LOG_LEVEL, LOG_FORMAT, SALE_TYPES, get_sale_url,
-    ITEMS_PER_PAGE, MAX_DISPLAY_PAGES, DISABLE_RATE_LIMIT, BOT_VERSION
+    ITEMS_PER_PAGE, MAX_DISPLAY_PAGES, DISABLE_RATE_LIMIT, BOT_VERSION,
+    SORT_OPTIONS, RELEASE_OPTIONS
 )
 
 # ログ設定
@@ -449,7 +450,10 @@ async def fanza_sale(ctx):
 @app_commands.describe(
     mode="表示モード: 評価順（デフォルト）、ランダム、リスト形式",
     sale_type="セールタイプ: 全て、期間限定、割引、日替わり、激安",
-    media_type="メディアタイプ: 全て（デフォルト）、2D動画のみ、VRのみ"
+    media_type="メディアタイプ: 全て（デフォルト）、2D動画のみ、VRのみ",
+    sort_type="ソート順: 評価順（デフォルト）、おすすめ順、人気順、売上順、新着順、お気に入り順",
+    keyword="キーワード検索: 作品名、女優名などで絞り込み",
+    release_filter="配信開始日: 全期間（デフォルト）、最新作、準新作"
 )
 @app_commands.choices(
     mode=[
@@ -468,9 +472,22 @@ async def fanza_sale(ctx):
         app_commands.Choice(name="🎬 全て（2D+VR）", value="all"),
         app_commands.Choice(name="📺 2D動画のみ", value="2d"),
         app_commands.Choice(name="🥽 VRのみ", value="vr"),
+    ],
+    sort_type=[
+        app_commands.Choice(name="⭐ 評価の高い順（デフォルト）", value="review_rank"),
+        app_commands.Choice(name="🔍 おすすめ順", value="suggest"),
+        app_commands.Choice(name="📈 人気順", value="ranking"),
+        app_commands.Choice(name="💰 売上本数順", value="saleranking_asc"),
+        app_commands.Choice(name="🆕 新着順", value="date"),
+        app_commands.Choice(name="❤️ お気に入り数順", value="bookmark_desc"),
+    ],
+    release_filter=[
+        app_commands.Choice(name="📅 全期間（デフォルト）", value="all"),
+        app_commands.Choice(name="🆕 最新作", value="latest"),
+        app_commands.Choice(name="📺 準新作", value="recent"),
     ]
 )
-async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating", sale_type: str = "all", media_type: str = "all"):
+async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating", sale_type: str = "all", media_type: str = "all", sort_type: str = "review_rank", keyword: Optional[str] = None, release_filter: str = "all"):
     """スラッシュコマンド版: FANZAのセール中高評価作品を表示"""
     
     # NSFWチェック
@@ -485,9 +502,15 @@ async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating
         # 処理中メッセージ（defer で3秒の猶予を確保）
         await interaction.response.defer()
         
-        # セールタイプとメディアタイプに応じたURLを生成
+        # セールタイプ、メディアタイプ、ソート、キーワード、リリースフィルターに応じたURLを生成
         media_param = None if media_type == "all" else media_type
-        url = get_sale_url(sale_type, media_type=media_param)
+        url = get_sale_url(
+            sale_type=sale_type, 
+            media_type=media_param, 
+            sort_type=sort_type, 
+            keyword=keyword, 
+            release_filter=release_filter
+        )
         
         # 商品情報を取得
         products = await scraper.get_high_rated_products(url=url, sale_type=sale_type)
