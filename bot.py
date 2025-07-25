@@ -465,7 +465,8 @@ async def fanza_sale(ctx):
     media_type="メディアタイプ: 全て（デフォルト）、2D動画のみ、VRのみ",
     sort_type="ソート順: 評価順（デフォルト）、おすすめ順、人気順、売上順、新着順、お気に入り順",
     keyword="キーワード検索: 作品名、女優名などで絞り込み",
-    release_filter="配信開始日: 全期間（デフォルト）、最新作、準新作"
+    release_filter="配信開始日: 全期間（デフォルト）、最新作、準新作",
+    count="表示件数: 1-10件（デフォルト: 5件）"
 )
 @app_commands.choices(
     mode=[
@@ -499,7 +500,7 @@ async def fanza_sale(ctx):
         app_commands.Choice(name="📺 準新作", value="recent"),
     ]
 )
-async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating", sale_type: str = "all", media_type: str = "all", sort_type: str = "review_rank", keyword: Optional[str] = None, release_filter: str = "all"):
+async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating", sale_type: str = "all", media_type: str = "all", sort_type: str = "review_rank", keyword: Optional[str] = None, release_filter: str = "all", count: app_commands.Range[int, 1, 10] = 5):
     """スラッシュコマンド版: FANZAのセール中高評価作品を表示"""
     
     # NSFWチェック
@@ -563,19 +564,19 @@ async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating
         import random
         
         if mode == "random":
-            # ランダムモード: 商品をシャッフルして5件選択
-            products = random.sample(products, min(5, len(products)))
+            # ランダムモード: 商品をシャッフルして指定件数選択
+            products = random.sample(products, min(count, len(products)))
             title = f"🎲 FANZAセール {media_emoji} {media_text} ランダム - {sale_type_name}"
-            description = f"ランダムに選ばれた高評価{media_text}です (5件)"
+            description = f"ランダムに選ばれた高評価{media_text}です ({count}件)"
         elif mode == "list":
             # リストモード: 簡易表示
             title = f"📋 FANZAセール {media_emoji} {media_text}リスト - {sale_type_name}"
             description = f"現在セール中の高評価{media_text}一覧 ({len(products)}件)"
         else:
-            # 評価順モード（デフォルト）- 最初の5件のみ表示
-            title = f"{media_emoji} FANZAセール 高評価{media_text}TOP5 - {sale_type_name}"
-            description = f"現在セール中の評価4.0以上の{media_text}です (表示: 5件 / 全{len(products)}件)"
-            products = products[:5]  # 評価順とランダムモードは5件に制限
+            # 評価順モード（デフォルト）- 指定件数のみ表示
+            title = f"{media_emoji} FANZAセール 高評価{media_text}TOP{count} - {sale_type_name}"
+            description = f"現在セール中の評価4.0以上の{media_text}です (表示: {count}件 / 全{len(products)}件)"
+            products = products[:count]  # 評価順とランダムモードは指定件数に制限
         
         # ヘッダーメッセージ
         header_embed = discord.Embed(
@@ -584,7 +585,14 @@ async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating
             color=discord.Color.gold(),
             timestamp=datetime.now()
         )
-        header_embed.set_thumbnail(url="https://i.imgur.com/fanza_logo.png")
+        
+        # 検索URLを追加
+        header_embed.add_field(
+            name="🔗 検索URL",
+            value=f"[FANZAで直接確認する]({url})",
+            inline=False
+        )
+        
         await interaction.followup.send(embed=header_embed)
         
         # モードに応じた表示
@@ -601,18 +609,6 @@ async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating
                 await interaction.followup.send(embed=embed)
                 await asyncio.sleep(0.5)
         
-        # フッターメッセージ
-        media_footer = {
-            "all": "🎬 2D+VR両方対応",
-            "2d": "📺 2D動画のみ対象", 
-            "vr": "🥽 VR作品のみ対象"
-        }.get(media_type, "🎬 2D+VR両方対応")
-        footer_embed = discord.Embed(
-            description=f"💡 スラッシュコマンド `/help` でヘルプを表示\n⚠️ 価格は変動する可能性があります\n{media_footer}",
-            color=discord.Color.greyple()
-        )
-        footer_embed.set_footer(text=f"取得時刻: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        await interaction.followup.send(embed=footer_embed)
         
     except Exception as e:
         logger.error(f"Error in slash fanza_sale command: {e}")
