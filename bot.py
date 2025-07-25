@@ -9,6 +9,7 @@ import platform
 from datetime import datetime, timedelta
 from typing import Dict, List
 from playwright_scraper import FanzaScraper  # Playwright版を使用
+from missav_scraper import MissAVScraper  # MissAV検索機能
 from config import (
     DISCORD_TOKEN, COMMAND_PREFIX, RATE_LIMIT_DURATION,
     LOG_LEVEL, LOG_FORMAT, SALE_TYPES, get_sale_url,
@@ -30,6 +31,7 @@ bot = commands.Bot(command_prefix=COMMAND_PREFIX, intents=intents)
 
 # スクレイパーとレート制限管理
 scraper = FanzaScraper()
+missav_scraper = MissAVScraper()
 user_last_command: Dict[int, datetime] = {}
 
 
@@ -519,6 +521,11 @@ async def slash_help(interaction: discord.Interaction):
         inline=True
     )
     embed.add_field(
+        name="🔍 `/missav_search`",
+        value="MissAVで動画を検索して視聴URLを取得\n**NEW!** 動画検索機能",
+        inline=True
+    )
+    embed.add_field(
         name="🔧 `!fanza_sale`",
         value="プレフィックス版コマンド\n（レガシー対応）",
         inline=True
@@ -748,6 +755,87 @@ class BotInfoView(View):
         )
         embed.set_footer(text="最終確認時刻")
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+@bot.tree.command(name="missav_search", description="🔍 MissAVで動画を検索して視聴URLを取得")
+@app_commands.describe(title="検索したい動画のタイトル")
+async def missav_search(interaction: discord.Interaction, title: str):
+    """MissAV動画検索コマンド"""
+    
+    # NSFWチェック
+    if not await check_nsfw_interaction(interaction):
+        return
+    
+    # レート制限チェック
+    if not await check_rate_limit_interaction(interaction):
+        return
+    
+    if not title or len(title.strip()) < 2:
+        await interaction.response.send_message("❌ 検索タイトルは2文字以上で入力してください。", ephemeral=True)
+        return
+    
+    try:
+        # 処理中メッセージ
+        await interaction.response.defer()
+        
+        # MissAVで動画を検索
+        videos = await missav_scraper.search_videos(title.strip())
+        
+        if not videos:
+            await interaction.followup.send(f"❌ 「{title}」に関連する動画が見つかりませんでした。", ephemeral=True)
+            return
+        
+        # 検索結果を表示（最大5件）
+        videos = videos[:5]
+        
+        # ヘッダーEmbed
+        header_embed = discord.Embed(
+            title=f"🔍 MissAV検索結果: {title}",
+            description=f"見つかった動画: {len(videos)}件",
+            color=discord.Color.purple(),
+            timestamp=datetime.now()
+        )
+        await interaction.followup.send(embed=header_embed)
+        
+        # 各動画の情報を表示
+        for i, video in enumerate(videos, 1):
+            embed = discord.Embed(
+                title=f"{i}. {video['title'][:60]}{'...' if len(video['title']) > 60 else ''}",
+                color=discord.Color.red(),
+                timestamp=datetime.now()
+            )
+            
+            if video.get('duration'):
+                embed.add_field(name="再生時間", value=video['duration'], inline=True)
+            
+            embed.add_field(name="ソース", value=video['source'], inline=True)
+            
+            if video.get('url'):
+                embed.add_field(name="視聴URL", value=f"[動画を見る]({video['url']})", inline=False)
+            
+            # サムネイル画像を設定
+            if video.get('thumbnail'):
+                embed.set_image(url=video['thumbnail'])
+            
+            embed.set_footer(text="MissAV検索結果")
+            
+            await interaction.followup.send(embed=embed)
+            await asyncio.sleep(0.5)
+        
+        # フッターメッセージ
+        footer_embed = discord.Embed(
+            description="⚠️ 18歳未満の視聴は禁止されています\n💡 `/help` でヘルプを表示",
+            color=discord.Color.greyple()
+        )
+        footer_embed.set_footer(text=f"検索時刻: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        await interaction.followup.send(embed=footer_embed)
+        
+    except Exception as e:
+        logger.error(f"Error in missav_search command: {e}")
+        try:
+            await interaction.followup.send("❌ 検索中にエラーが発生しました。しばらく時間をおいてから再試行してください。", ephemeral=True)
+        except:
+            logger.error("Failed to send error message")
 
 
 def main():
