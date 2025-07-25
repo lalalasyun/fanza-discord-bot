@@ -218,6 +218,25 @@ sudo apt install -y libnss3 libnspr4 libasound2t64
 
 プルリクエストやイシューの報告を歓迎します！
 
+### 🧪 PRのテスト方法（WSL環境）
+
+WSL環境では、PRブランチから直接Botをテストできます：
+
+```bash
+# PR番号を指定してテスト
+./update_bot_pr.sh 123
+
+# ブランチ名を指定してテスト
+./update_bot_pr.sh feature/new-feature
+```
+
+テスト後、mainブランチに戻るには：
+```bash
+./update_bot.sh
+```
+
+詳細は[WSL運用ガイド](README_WSL.md)を参照してください。
+
 ## ⚡ クイック起動コマンド
 
 ```bash
