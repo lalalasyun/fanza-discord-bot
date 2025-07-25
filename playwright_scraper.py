@@ -1,15 +1,16 @@
 """
 Playwright版スクレイパー（Seleniumの代替案）
 軽量で高速、Chrome/Chromiumのインストールが不要
+高速化最適化済み
 """
 
 import asyncio
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright, Browser, BrowserContext
 from datetime import datetime, timedelta
 import logging
 import re
 import hashlib
-from typing import List, Dict
+from typing import List, Dict, Optional
 from config import USER_AGENT, FANZA_SALE_URL, MIN_RATING, MAX_ITEMS, CACHE_DURATION
 
 logger = logging.getLogger(__name__)
@@ -21,6 +22,8 @@ class PlaywrightFanzaScraper:
         self.cache_timestamp = None
         self.cache_by_url = {}  # URL別の包括的キャッシュ
         self.cache_timestamp_by_url = {}  # URL別のタイムスタンプ
+        self._browser: Optional[Browser] = None
+        self._context: Optional[BrowserContext] = None
 
     def parse_rating(self, rating_text: str) -> float:
         """評価テキストから数値を抽出"""
@@ -43,6 +46,35 @@ class PlaywrightFanzaScraper:
     def _generate_cache_key(self, url: str) -> str:
         """URLベースの包括的なキャッシュキーを生成"""
         return hashlib.md5(url.encode('utf-8')).hexdigest()
+    
+    async def _get_browser(self) -> Browser:
+        """ブラウザインスタンスを取得（再利用）"""
+        if self._browser is None or not self._browser.is_connected():
+            playwright = await async_playwright().start()
+            self._browser = await playwright.chromium.launch(
+                headless=True,
+                args=['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--disable-images']
+            )
+        return self._browser
+    
+    async def _get_context(self) -> BrowserContext:
+        """ブラウザコンテキストを取得（再利用）"""
+        if self._context is None or self._context.browser != await self._get_browser():
+            browser = await self._get_browser()
+            self._context = await browser.new_context(
+                user_agent=USER_AGENT,
+                viewport={'width': 1920, 'height': 1080}
+            )
+        return self._context
+    
+    async def close(self):
+        """リソースをクリーンアップ"""
+        if self._context:
+            await self._context.close()
+            self._context = None
+        if self._browser:
+            await self._browser.close()
+            self._browser = None
 
     async def get_high_rated_products(self, url: str = None, sale_type: str = "all") -> List[Dict[str, any]]:
         """高評価商品を取得（キャッシュ機能付き）"""
@@ -69,43 +101,38 @@ class PlaywrightFanzaScraper:
         return products
 
     async def scrape_products(self, url: str) -> List[Dict[str, any]]:
-        """実際のスクレイピング処理"""
+        """実際のスクレイピング処理（高速化版）"""
         products = []
         
         try:
-            async with async_playwright() as p:
-                # ブラウザを起動（自動的にChromiumをダウンロード）
-                browser = await p.chromium.launch(
-                    headless=True,
-                    args=['--no-sandbox', '--disable-dev-shm-usage']
-                )
-                
-                # コンテキストとページを作成
-                context = await browser.new_context(
-                    user_agent=USER_AGENT,
-                    viewport={'width': 1920, 'height': 1080}
-                )
-                page = await context.new_page()
-                
+            # 再利用可能なブラウザコンテキストを取得
+            context = await self._get_context()
+            page = await context.new_page()
+            
+            try:
                 # ページにアクセス
                 logger.info(f"Accessing URL: {url}")
-                await page.goto(url, wait_until='networkidle')
+                await page.goto(url, wait_until='domcontentloaded')  # networkidleより高速
                 
                 # 年齢認証の処理
                 try:
-                    # 年齢認証ボタンを探す
+                    # 年齢認証ボタンを探す（タイムアウト短縮）
                     age_button = await page.query_selector("a:has-text('はい')")
                     if age_button:
                         await age_button.click()
                         logger.info("Age verification completed")
-                        await page.wait_for_load_state('networkidle')
+                        await page.wait_for_load_state('domcontentloaded')
                 except:
                     pass
                 
-                # 商品リストが読み込まれるまで待機
-                await page.wait_for_timeout(3000)
+                # 商品リストの要素を直接待機（タイムアウト短縮）
+                try:
+                    await page.wait_for_selector("[data-e2eid='content-card'], li[class*='border border-gray-300']", timeout=10000)
+                except:
+                    logger.warning("Product selector not found within timeout")
+                    return []
                 
-                # 商品要素を探す
+                # 商品要素を探す（最初に見つかったセレクターを使用）
                 product_selectors = [
                     "[data-e2eid='content-card']",
                     "li[class*='border border-gray-300']",
@@ -123,213 +150,155 @@ class PlaywrightFanzaScraper:
                 
                 if not product_elements:
                     logger.warning("No product elements found")
-                    await browser.close()
                     return products
                 
-                # 各商品の情報を取得（最大100件まで確認）
+                # 並列処理で商品情報を取得（最大100件まで確認）
+                semaphore = asyncio.Semaphore(10)  # 同時処理数制限
+                tasks = []
+                
+                async def process_element(element):
+                    async with semaphore:
+                        return await self._extract_product_info(element)
+                
+                # タスクを作成
                 for element in product_elements[:100]:
-                    try:
-                        # タイトル
-                        title = ""
-                        title_selectors = [
-                            "a[data-e2eid='title']",
-                            "a[href*='/detail/']",
-                            "span.hover\\:underline",
-                            "a span.hover\\:underline"
-                        ]
-                        for selector in title_selectors:
-                            title_elem = await element.query_selector(selector)
-                            if title_elem:
-                                title = await title_elem.text_content()
-                                title = title.strip() if title else ""
-                                if title:
-                                    break
-                        
-                        if not title:
-                            continue
-                        
-                        # URL
-                        url = ""
-                        link_elem = await element.query_selector("a[data-e2eid='title']")
-                        if not link_elem:
-                            link_elem = await element.query_selector("a[href*='/detail/']")
-                        if link_elem:
-                            url = await link_elem.get_attribute('href')
-                            if url and not url.startswith('http'):
-                                url = f"https://www.dmm.co.jp{url}"
-                        
-                        # 評価（星の画像の数をカウント）
-                        rating = 0.0
-                        star_images = await element.query_selector_all("img[src*='star/yellow']")
-                        if star_images:
-                            rating = len(star_images)
-                        
-                        # 価格
-                        price = "価格不明"
-                        price_elem = await element.query_selector("[data-e2eid='content-price']")
-                        if price_elem:
-                            price_text = await price_elem.text_content()
-                            if price_text and '円' in price_text:
-                                price = price_text.strip()
-                        
-                        # 割引情報
-                        discount = ""
-                        discount_elem = await element.query_selector("div:has-text('セール')")
-                        if discount_elem:
-                            discount_text = await discount_elem.text_content()
-                            if 'セール' in discount_text:
-                                discount = "セール中"
-                        
-                        # 商品画像URL
-                        image_url = ""
-                        image_selectors = [
-                            "img[data-e2eid='content-image']",
-                            "img[src*='pics.dmm.co.jp']",
-                            "img[src*='dmm.com']",
-                            "img[alt*='パッケージ']",
-                            "div[data-e2eid='content-image'] img",
-                            "picture img",
-                            "img[loading='lazy']"
-                        ]
-                        for selector in image_selectors:
-                            img_elem = await element.query_selector(selector)
-                            if img_elem:
-                                image_url = await img_elem.get_attribute('src')
-                                if image_url and ('dmm' in image_url or 'pics' in image_url):
-                                    # 高解像度版に変換
-                                    if 'ps.jpg' in image_url:
-                                        image_url = image_url.replace('ps.jpg', 'pl.jpg')
-                                    break
-                        
-                        # 女優名（出演者情報）with URLs
-                        actresses = []
-                        actress_selectors = [
-                            # Primary selector based on debug analysis - this should work!
-                            "a[href*='?actress=']",
-                            "a.text-gray-500.hover\\:underline",
-                            # Backup selectors for robustness
-                            "a[href*='/actress/']",
-                            "a[href*='actress_id=']",
-                            "a[href*='/list/?actress=']",
-                            "[data-e2eid='performer'] a",
-                            "[data-e2eid='actress'] a",
-                            ".actress-name a",
-                            ".performer-name a",
-                            ".performerName a",
-                            "a[href*='/performer/']",
-                            # Generic link selectors that might contain actress names
-                            "a[href*='actress']",
-                            "a[title*='女優']",
-                            "a[title*='出演']"
-                        ]
-                        
-                        # Try each selector and collect unique actress names with URLs
-                        for selector in actress_selectors:
-                            try:
-                                actress_elems = await element.query_selector_all(selector)
-                                if actress_elems:
-                                    for actress_elem in actress_elems:
-                                        actress_name = await actress_elem.text_content()
-                                        actress_href = await actress_elem.get_attribute('href') or ""
-                                        if actress_name and actress_name.strip():
-                                            clean_name = actress_name.strip()
-                                            # Filter out non-actress links (common false positives)
-                                            if (len(clean_name) > 1 and 
-                                                clean_name not in ['詳細', '商品', '動画', 'サンプル', '画像', 'レビュー'] and
-                                                not any(a['name'] == clean_name for a in actresses)):
-                                                
-                                                # Build full URL if href is relative
-                                                if actress_href.startswith('/'):
-                                                    actress_url = f"https://www.dmm.co.jp{actress_href}"
-                                                elif actress_href.startswith('http'):
-                                                    actress_url = actress_href
-                                                else:
-                                                    actress_url = f"https://www.dmm.co.jp/{actress_href}"
-                                                
-                                                actresses.append({
-                                                    'name': clean_name,
-                                                    'url': actress_url
-                                                })
-                                    if actresses:
-                                        logger.info(f"Found actresses with selector '{selector}': {[a['name'] for a in actresses]}")
-                                        break
-                            except Exception as e:
-                                logger.debug(f"Selector '{selector}' failed: {e}")
-                                continue
-                        
-                        # If no actresses found with specific selectors, try fallback methods
-                        if not actresses:
-                            # Fallback: Look for any links that might be actress names
-                            try:
-                                all_links = await element.query_selector_all("a")
-                                for link in all_links[:10]:  # Limit to first 10 links to avoid performance issues
-                                    href = await link.get_attribute('href') or ""
-                                    text = await link.text_content() or ""
-                                    title = await link.get_attribute('title') or ""
-                                    
-                                    # Check if this looks like an actress link
-                                    if (('actress' in href.lower() or 'performer' in href.lower()) and 
-                                        text.strip() and len(text.strip()) > 1 and
-                                        text.strip() not in ['詳細', '商品', '動画', 'サンプル', '画像', 'レビュー']):
-                                        clean_name = text.strip()
-                                        if not any(a['name'] == clean_name for a in actresses):
-                                            # Build full URL if href is relative
-                                            if href.startswith('/'):
-                                                actress_url = f"https://www.dmm.co.jp{href}"
-                                            elif href.startswith('http'):
-                                                actress_url = href
-                                            else:
-                                                actress_url = f"https://www.dmm.co.jp/{href}"
-                                            
-                                            actresses.append({
-                                                'name': clean_name,
-                                                'url': actress_url
-                                            })
-                                            logger.info(f"Found actress via fallback: {clean_name} (href: {href})")
-                            except Exception as e:
-                                logger.debug(f"Fallback actress detection failed: {e}")
-                        
-                        # Store actress data as list of dictionaries
-                        actress_names = actresses if actresses else []
-                        
-                        # Debug logging when no actresses found
-                        if not actress_names:
-                            logger.debug(f"No actresses found for product: {title[:30]}...")
-                            # Log some HTML structure for debugging (first few elements)
-                            try:
-                                sample_html = await element.inner_html()
-                                logger.debug(f"Sample HTML structure: {sample_html[:500]}...")
-                            except:
-                                pass
-                        
-                        # 評価が基準以上の商品のみ追加
-                        if rating >= MIN_RATING:
-                            products.append({
-                                'title': title[:50] + '...' if len(title) > 50 else title,
-                                'rating': rating,
-                                'price': price,
-                                'url': url,
-                                'image_url': image_url,
-                                'actresses': actress_names
-                            })
-                            logger.info(f"Added product: {title[:30]}... (Rating: {rating}, Image: {bool(image_url)})")
-                        
-                    except Exception as e:
-                        logger.error(f"Error parsing product element: {e}")
-                        continue
+                    tasks.append(process_element(element))
                 
-                await browser.close()
+                # 並列実行
+                results = await asyncio.gather(*tasks, return_exceptions=True)
                 
-                # 評価順でソートして上位を返す
-                products.sort(key=lambda x: x['rating'], reverse=True)
-                products = products[:MAX_ITEMS]
+                # 結果を処理
+                for result in results:
+                    if isinstance(result, dict) and result.get('rating', 0) >= MIN_RATING:
+                        products.append(result)
+                        logger.info(f"Added product: {result['title'][:30]}... (Rating: {result['rating']})")
                 
-                logger.info(f"Successfully scraped {len(products)} high-rated products")
+            finally:
+                await page.close()
                 
+            # 評価順でソートして上位を返す
+            products.sort(key=lambda x: x['rating'], reverse=True)
+            products = products[:MAX_ITEMS]
+            
+            logger.info(f"Successfully scraped {len(products)} high-rated products")
+            
         except Exception as e:
             logger.error(f"Scraping error: {e}")
         
         return products
+    
+    async def _extract_product_info(self, element) -> Dict[str, any]:
+        """商品要素から情報を抽出（並列処理用）"""
+        try:
+            # タイトル
+            title = ""
+            title_selectors = [
+                "a[data-e2eid='title']",
+                "a[href*='/detail/']",
+                "span.hover\\:underline",
+                "a span.hover\\:underline"
+            ]
+            for selector in title_selectors:
+                title_elem = await element.query_selector(selector)
+                if title_elem:
+                    title = await title_elem.text_content()
+                    title = title.strip() if title else ""
+                    if title:
+                        break
+            
+            if not title:
+                return {}
+            
+            # URL
+            url = ""
+            link_elem = await element.query_selector("a[data-e2eid='title']")
+            if not link_elem:
+                link_elem = await element.query_selector("a[href*='/detail/']")
+            if link_elem:
+                url = await link_elem.get_attribute('href')
+                if url and not url.startswith('http'):
+                    url = f"https://www.dmm.co.jp{url}"
+            
+            # 評価（星の画像の数をカウント）
+            rating = 0.0
+            star_images = await element.query_selector_all("img[src*='star/yellow']")
+            if star_images:
+                rating = len(star_images)
+            
+            # 価格
+            price = "価格不明"
+            price_elem = await element.query_selector("[data-e2eid='content-price']")
+            if price_elem:
+                price_text = await price_elem.text_content()
+                if price_text and '円' in price_text:
+                    price = price_text.strip()
+            
+            # 商品画像URL（最初の有効なものを使用）
+            image_url = ""
+            image_selectors = [
+                "img[data-e2eid='content-image']",
+                "img[src*='pics.dmm.co.jp']",
+                "img[src*='dmm.com']"
+            ]
+            for selector in image_selectors:
+                img_elem = await element.query_selector(selector)
+                if img_elem:
+                    image_url = await img_elem.get_attribute('src')
+                    if image_url and ('dmm' in image_url or 'pics' in image_url):
+                        # 高解像度版に変換
+                        if 'ps.jpg' in image_url:
+                            image_url = image_url.replace('ps.jpg', 'pl.jpg')
+                        break
+            
+            # 女優名（優先順位付きセレクター）
+            actresses = []
+            actress_selectors = [
+                "a[href*='?actress=']",
+                "a.text-gray-500.hover\\:underline",
+                "a[href*='/actress/']",
+                "a[href*='actress_id=']"
+            ]
+            
+            # 最初に見つかったセレクターのみ使用（パフォーマンス向上）
+            for selector in actress_selectors:
+                try:
+                    actress_elems = await element.query_selector_all(selector)
+                    if actress_elems:
+                        for actress_elem in actress_elems[:3]:  # 最大3名まで
+                            actress_name = await actress_elem.text_content()
+                            actress_href = await actress_elem.get_attribute('href') or ""
+                            if actress_name and actress_name.strip():
+                                clean_name = actress_name.strip()
+                                if (len(clean_name) > 1 and 
+                                    clean_name not in ['詳細', '商品', '動画', 'サンプル', '画像', 'レビュー'] and
+                                    not any(a['name'] == clean_name for a in actresses)):
+                                    
+                                    # Build full URL
+                                    if actress_href.startswith('/'):
+                                        actress_url = f"https://www.dmm.co.jp{actress_href}"
+                                    else:
+                                        actress_url = actress_href if actress_href.startswith('http') else f"https://www.dmm.co.jp/{actress_href}"
+                                    
+                                    actresses.append({
+                                        'name': clean_name,
+                                        'url': actress_url
+                                    })
+                        break  # 最初に成功したセレクターで完了
+                except Exception:
+                    continue
+            
+            return {
+                'title': title[:50] + '...' if len(title) > 50 else title,
+                'rating': rating,
+                'price': price,
+                'url': url,
+                'image_url': image_url,
+                'actresses': actresses
+            }
+            
+        except Exception as e:
+            logger.error(f"Error parsing product element: {e}")
+            return {}
 
 
 # 非同期対応のラッパー
@@ -344,3 +313,7 @@ class FanzaScraper:
     def format_rating_stars(self, rating: float) -> str:
         """評価を星マークで表現"""
         return self.playwright_scraper.format_rating_stars(rating)
+    
+    async def close(self):
+        """リソースをクリーンアップ"""
+        await self.playwright_scraper.close()

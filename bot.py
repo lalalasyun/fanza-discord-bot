@@ -976,6 +976,19 @@ async def missav_search(interaction: discord.Interaction, title: str):
             logger.error("Failed to send error message")
 
 
+@bot.event
+async def on_ready():
+    """Botが起動したときのイベント"""
+    logger.info(f'{bot.user} has logged in')
+
+async def cleanup():
+    """クリーンアップ処理"""
+    try:
+        await scraper.close()
+        logger.info("Scraper resources cleaned up")
+    except Exception as e:
+        logger.error(f"Error during cleanup: {e}")
+
 def main():
     """メイン実行関数"""
     if not DISCORD_TOKEN:
@@ -984,8 +997,17 @@ def main():
     
     try:
         bot.run(DISCORD_TOKEN)
+    except KeyboardInterrupt:
+        logger.info("Bot shutdown requested")
     except Exception as e:
         logger.error(f"Failed to run bot: {e}")
+    finally:
+        # クリーンアップ処理を実行
+        import asyncio
+        try:
+            asyncio.run(cleanup())
+        except Exception as e:
+            logger.error(f"Cleanup failed: {e}")
 
 
 if __name__ == "__main__":
