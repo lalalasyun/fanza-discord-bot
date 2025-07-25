@@ -597,18 +597,12 @@ async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating
                 await interaction.followup.send(embed=embed)
                 await asyncio.sleep(0.5)
         
-        # フッターメッセージ
-        media_footer = {
-            "all": "🎬 2D+VR両方対応",
-            "2d": "📺 2D動画のみ対象", 
-            "vr": "🥽 VR作品のみ対象"
-        }.get(media_type, "🎬 2D+VR両方対応")
-        footer_embed = discord.Embed(
-            description=f"💡 スラッシュコマンド `/help` でヘルプを表示\n⚠️ 価格は変動する可能性があります\n{media_footer}",
+        # ヘルプメッセージ
+        help_embed = discord.Embed(
+            description="💡 スラッシュコマンド `/help` でヘルプを表示",
             color=discord.Color.greyple()
         )
-        footer_embed.set_footer(text=f"取得時刻: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        await interaction.followup.send(embed=footer_embed)
+        await interaction.followup.send(embed=help_embed)
         
     except Exception as e:
         logger.error(f"Error in slash fanza_sale command: {e}")
