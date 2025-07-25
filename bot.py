@@ -526,7 +526,7 @@ async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating
         )
         
         # 商品情報を取得
-        products = await scraper.get_high_rated_products(url=url, sale_type=sale_type)
+        products = await scraper.get_high_rated_products(url=url)
         
         if not products:
             media_text = {
@@ -972,6 +972,14 @@ async def missav_search(interaction: discord.Interaction, title: str):
             logger.error("Failed to send error message")
 
 
+async def cleanup():
+    """クリーンアップ処理"""
+    try:
+        await scraper.close()
+        logger.info("Scraper resources cleaned up")
+    except Exception as e:
+        logger.error(f"Error during cleanup: {e}")
+
 def main():
     """メイン実行関数"""
     if not DISCORD_TOKEN:
@@ -980,8 +988,16 @@ def main():
     
     try:
         bot.run(DISCORD_TOKEN)
+    except KeyboardInterrupt:
+        logger.info("Bot shutdown requested")
     except Exception as e:
         logger.error(f"Failed to run bot: {e}")
+    finally:
+        # クリーンアップ処理を実行
+        try:
+            asyncio.run(cleanup())
+        except Exception as e:
+            logger.error(f"Cleanup failed: {e}")
 
 
 if __name__ == "__main__":
