@@ -41,9 +41,7 @@ https://discord.com/api/oauth2/authorize?client_id=1378875279556214804&permissio
 
 ### 2. NSFWチャンネルで使用
 チャンネル設定でNSFWを有効化してから以下のコマンドを使用：
-- `/fanza_sale` - セール中の高評価作品を表示（2D+VR両方対応）
-- `/fanza_sale_2d` - **NEW!** セール中の高評価2D動画のみを表示
-- `/fanza_sale_vr` - **NEW!** セール中の高評価VR作品のみを表示
+- `/fanza_sale` - セール中の高評価作品を表示（media_typeオプションで絞り込み可能）
 - `/missav_search [タイトル]` - MissAVで動画を検索
 - `/help` - ヘルプを表示
 
@@ -135,11 +133,9 @@ https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=21
 ### スラッシュコマンド（推奨）
 
 #### 🎬 FANZA関連
-- `/fanza_sale` - セール中の高評価作品を表示（2D+VR両方対応）
-- `/fanza_sale_2d` - **NEW!** セール中の高評価2D動画のみを表示
-- `/fanza_sale_vr` - **NEW!** セール中の高評価VR作品のみを表示
+- `/fanza_sale` - セール中の高評価作品を表示
 
-**共通オプション**:
+**オプション**:
 - `mode` オプション:
   - 🏆 評価順（デフォルト） - 評価の高い順に表示
   - 🎲 ランダム - ランダムな順序で表示
@@ -150,13 +146,17 @@ https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=21
   - 💸 割引セール (20-70% OFF)
   - 📅 日替わりセール
   - 💴 激安セール (10円/100円)
+- `media_type` オプション **NEW!**:
+  - 🎬 全て（2D+VR）（デフォルト）
+  - 📺 2D動画のみ
+  - 🥽 VRのみ
 - **MissAV連携**: 各作品のMissAV視聴URLを自動で検索・表示
 
 **使用例**:
 ```
-/fanza_sale mode:評価順 sale_type:全てのセール
-/fanza_sale_2d mode:ランダム sale_type:割引セール
-/fanza_sale_vr mode:リスト形式 sale_type:期間限定セール
+/fanza_sale mode:評価順 sale_type:全てのセール media_type:全て
+/fanza_sale mode:ランダム sale_type:割引セール media_type:2D動画のみ
+/fanza_sale mode:リスト形式 sale_type:期間限定セール media_type:VRのみ
 ```
 
 #### 🔍 MissAV検索 **NEW!**
