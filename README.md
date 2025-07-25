@@ -180,6 +180,8 @@ https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=21
   - 📺 準新作
 - `count` オプション **NEW!**:
   - 🔢 表示件数: 1-10件（デフォルト: 5件）
+- `force_refresh` オプション **NEW!**:
+  - 🔄 キャッシュを無視して最新データを取得（デフォルト: false）
 - **女優名表示**: 出演者情報を自動取得し、詳細画面とリスト表示の両方で表示
 - **女優ページリンク**: 出演者名をクリックすると直接FANZAの女優ページにアクセス
 - **MissAV連携**: 各作品のMissAV視聴URLを自動で検索・表示
@@ -199,6 +201,9 @@ https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=21
 
 # 最新作のみを表示
 /fanza_sale sort_type:新着順 release_filter:最新作 count:3
+
+# キャッシュを無視して最新データを取得
+/fanza_sale force_refresh:true
 ```
 
 #### 🔍 MissAV検索 **NEW!**
@@ -210,6 +215,7 @@ https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=21
     - 部分キーワード: `イラマチオ`、`義娘`
   - **取得情報**: タイトル、視聴URL、サムネイル、再生時間
   - **検索結果**: 最大5件、関連性順で表示
+  - `force_refresh`: キャッシュを無視して最新データを取得
 
 #### 💡 ヘルプ・情報
 - `/help` - ヘルプを表示（プライベート応答）

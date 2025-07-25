@@ -81,8 +81,14 @@ class PlaywrightFanzaScraper:
             await self._playwright.stop()
             self._playwright = None
 
-    async def get_high_rated_products(self, url: str = None, max_items: Optional[int] = None) -> List[Dict[str, any]]:
-        """高評価商品を取得（キャッシュ機能付き）"""
+    async def get_high_rated_products(self, url: str = None, max_items: Optional[int] = None, force_refresh: bool = False) -> List[Dict[str, any]]:
+        """高評価商品を取得（キャッシュ機能付き）
+        
+        Args:
+            url: スクレイピング対象のURL（省略時はデフォルトURL）
+            max_items: 最大取得件数
+            force_refresh: Trueの場合、キャッシュを無視して新規取得
+        """
         # URLが指定されていない場合はデフォルトURL
         if not url:
             url = FANZA_SALE_URL
@@ -90,11 +96,15 @@ class PlaywrightFanzaScraper:
         # URLベースのキャッシュキーを生成
         cache_key = self._generate_cache_key(url)
         
-        # キャッシュチェック
-        if cache_key in self.cache_timestamp_by_url and cache_key in self.cache_by_url:
-            if datetime.now() - self.cache_timestamp_by_url[cache_key] < timedelta(seconds=CACHE_DURATION):
-                logger.info(f"Returning cached data for URL: {url[:100]}...")
-                return self.cache_by_url[cache_key]
+        # force_refreshがFalseの場合のみキャッシュをチェック
+        if not force_refresh:
+            # キャッシュチェック
+            if cache_key in self.cache_timestamp_by_url and cache_key in self.cache_by_url:
+                if datetime.now() - self.cache_timestamp_by_url[cache_key] < timedelta(seconds=CACHE_DURATION):
+                    logger.info(f"Returning cached data for URL: {url[:100]}...")
+                    return self.cache_by_url[cache_key]
+        else:
+            logger.info(f"Force refresh enabled, bypassing cache for URL: {url[:100]}...")
         
         # 新規取得
         products = await self.scrape_products(url)
