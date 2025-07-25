@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 MISSAV_BASE_URL = "https://missav123.com"
-CACHE_DURATION = 1800  # 30分キャッシュ
+CACHE_DURATION = 0  # キャッシュを無効化
 
 
 class MissAVScraper:

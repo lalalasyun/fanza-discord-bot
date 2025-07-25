@@ -130,7 +130,7 @@ ITEMS_PER_PAGE = 5  # リスト形式での1ページあたりの表示件数
 MAX_DISPLAY_PAGES = 10  # リスト形式での最大ページ数
 
 # キャッシュ設定
-CACHE_DURATION = 3600  # 1時間（秒）
+CACHE_DURATION = 0  # キャッシュを無効化
 
 # レート制限設定
 RATE_LIMIT_DURATION = 30  # 30秒

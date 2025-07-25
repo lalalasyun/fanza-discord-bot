@@ -261,14 +261,14 @@ results = await asyncio.gather(*tasks, return_exceptions=True)
 ```python
 MIN_RATING = 4.0          # 表示する最低評価
 MAX_ITEMS = 5             # 表示する最大件数
-CACHE_DURATION = 3600     # キャッシュ保持時間（秒）
+CACHE_DURATION = 0        # キャッシュ無効化（0で無効）
 RATE_LIMIT_DURATION = 300 # レート制限時間（秒）
 ```
 
 ### MissAV関連設定
 ```python
 # missav_scraper.pyで変更可能
-CACHE_DURATION = 1800     # MissAVキャッシュ保持時間（30分）
+CACHE_DURATION = 0        # MissAVキャッシュ無効化（0で無効）
 MISSAV_BASE_URL = "https://missav123.com"  # ベースURL
 ```
 
