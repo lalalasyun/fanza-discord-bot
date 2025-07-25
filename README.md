@@ -169,6 +169,8 @@ https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=21
   - 📅 全期間（デフォルト）
   - 🆕 最新作
   - 📺 準新作
+- `count` オプション **NEW!**:
+  - 🔢 表示件数: 1-10件（デフォルト: 5件）
 - **女優名表示**: 出演者情報を自動取得し、詳細画面とリスト表示の両方で表示
 - **MissAV連携**: 各作品のMissAV視聴URLを自動で検索・表示
 
@@ -177,7 +179,7 @@ https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=21
 /fanza_sale mode:評価順 sale_type:全てのセール media_type:全て
 /fanza_sale mode:ランダム sale_type:割引セール media_type:2D動画のみ sort_type:人気順
 /fanza_sale mode:リスト形式 sale_type:期間限定セール media_type:VRのみ keyword:巨乳
-/fanza_sale sort_type:新着順 release_filter:最新作 keyword:学園もの
+/fanza_sale sort_type:新着順 release_filter:最新作 keyword:学園もの count:8
 ```
 
 #### 🔍 MissAV検索 **NEW!**
