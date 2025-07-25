@@ -8,6 +8,7 @@ from playwright.async_api import async_playwright
 from datetime import datetime, timedelta
 import logging
 import re
+import hashlib
 from typing import List, Dict
 from config import USER_AGENT, FANZA_SALE_URL, MIN_RATING, MAX_ITEMS, CACHE_DURATION
 
@@ -18,8 +19,8 @@ class PlaywrightFanzaScraper:
     def __init__(self):
         self.cache = {}
         self.cache_timestamp = None
-        self.cache_by_type = {}  # セールタイプ別のキャッシュ
-        self.cache_timestamp_by_type = {}  # セールタイプ別のタイムスタンプ
+        self.cache_by_url = {}  # URL別の包括的キャッシュ
+        self.cache_timestamp_by_url = {}  # URL別のタイムスタンプ
 
     def parse_rating(self, rating_text: str) -> float:
         """評価テキストから数値を抽出"""
@@ -39,23 +40,31 @@ class PlaywrightFanzaScraper:
         
         return "★" * full_stars + "☆" * half_star + "☆" * empty_stars
 
+    def _generate_cache_key(self, url: str) -> str:
+        """URLベースの包括的なキャッシュキーを生成"""
+        return hashlib.md5(url.encode('utf-8')).hexdigest()
+
     async def get_high_rated_products(self, url: str = None, sale_type: str = "all") -> List[Dict[str, any]]:
         """高評価商品を取得（キャッシュ機能付き）"""
         # URLが指定されていない場合はデフォルトURL
         if not url:
             url = FANZA_SALE_URL
         
-        # セールタイプ別のキャッシュチェック
-        if sale_type in self.cache_timestamp_by_type and sale_type in self.cache_by_type:
-            if datetime.now() - self.cache_timestamp_by_type[sale_type] < timedelta(seconds=CACHE_DURATION):
-                logger.info(f"Returning cached data for sale_type: {sale_type}")
-                return self.cache_by_type[sale_type]
+        # URLベースのキャッシュキーを生成
+        cache_key = self._generate_cache_key(url)
+        
+        # キャッシュチェック
+        if cache_key in self.cache_timestamp_by_url and cache_key in self.cache_by_url:
+            if datetime.now() - self.cache_timestamp_by_url[cache_key] < timedelta(seconds=CACHE_DURATION):
+                logger.info(f"Returning cached data for URL: {url[:100]}...")
+                return self.cache_by_url[cache_key]
         
         # 新規取得
         products = await self.scrape_products(url)
         if products:
-            self.cache_by_type[sale_type] = products
-            self.cache_timestamp_by_type[sale_type] = datetime.now()
+            self.cache_by_url[cache_key] = products
+            self.cache_timestamp_by_url[cache_key] = datetime.now()
+            logger.info(f"Cached {len(products)} products for URL: {url[:100]}...")
         
         return products
 
