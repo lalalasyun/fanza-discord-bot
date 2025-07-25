@@ -80,7 +80,13 @@ class FanzaEmbed(discord.Embed):
         
         # 女優名を追加
         if product.get('actresses'):
-            self.add_field(name="出演者", value=product['actresses'], inline=False)
+            if isinstance(product['actresses'], list) and product['actresses']:
+                # New format: list of dictionaries with name and url
+                actress_links = [f"[{actress['name']}]({actress['url']})" for actress in product['actresses']]
+                self.add_field(name="出演者", value=", ".join(actress_links), inline=False)
+            elif isinstance(product['actresses'], str) and product['actresses'] != "不明":
+                # Legacy format: string of names
+                self.add_field(name="出演者", value=product['actresses'], inline=False)
         
         if product['url']:
             self.add_field(name="詳細", value=f"[商品ページを見る]({product['url']})", inline=False)
@@ -142,8 +148,14 @@ class PaginationView(View):
             value_text = f"{rating_stars} ({product['rating']:.1f}) | {product['price']}"
             
             # 女優名を追加
-            if product.get('actresses') and product['actresses'] != "不明":
-                value_text += f"\n👥 出演: {product['actresses']}"
+            if product.get('actresses'):
+                if isinstance(product['actresses'], list) and product['actresses']:
+                    # New format: list of dictionaries with name and url
+                    actress_links = [f"[{actress['name']}]({actress['url']})" for actress in product['actresses']]
+                    value_text += f"\n👥 出演: {', '.join(actress_links)}"
+                elif isinstance(product['actresses'], str) and product['actresses'] != "不明":
+                    # Legacy format: string of names
+                    value_text += f"\n👥 出演: {product['actresses']}"
             
             value_text += f"\n[詳細を見る]({product['url']})"
             
