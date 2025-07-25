@@ -55,7 +55,7 @@ MAX_DISPLAY_PAGES = 10  # リスト形式での最大ページ数
 CACHE_DURATION = 3600  # 1時間（秒）
 
 # レート制限設定
-RATE_LIMIT_DURATION = 300  # 5分（秒）
+RATE_LIMIT_DURATION = 30  # 30秒
 DISABLE_RATE_LIMIT = os.getenv("DISABLE_RATE_LIMIT", "false").lower() == "true"  # 開発環境でのレート制限無効化
 
 # ユーザーエージェント
