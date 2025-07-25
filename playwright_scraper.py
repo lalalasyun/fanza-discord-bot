@@ -195,25 +195,79 @@ class PlaywrightFanzaScraper:
                         # 女優名（出演者情報）
                         actresses = []
                         actress_selectors = [
+                            # Primary selector based on debug analysis - this should work!
+                            "a[href*='?actress=']",
+                            "a.text-gray-500.hover\\:underline",
+                            # Backup selectors for robustness
+                            "a[href*='/actress/']",
+                            "a[href*='actress_id=']",
+                            "a[href*='/list/?actress=']",
                             "[data-e2eid='performer'] a",
-                            "a[href*='/article/actress/']",
+                            "[data-e2eid='actress'] a",
+                            ".actress-name a",
+                            ".performer-name a",
                             ".performerName a",
                             "a[href*='/performer/']",
-                            "div:has-text('出演者') + div a",
-                            "div:has-text('出演') a"
+                            # Generic link selectors that might contain actress names
+                            "a[href*='actress']",
+                            "a[title*='女優']",
+                            "a[title*='出演']"
                         ]
+                        
+                        # Try each selector and collect unique actress names
                         for selector in actress_selectors:
-                            actress_elems = await element.query_selector_all(selector)
-                            if actress_elems:
-                                for actress_elem in actress_elems:
-                                    actress_name = await actress_elem.text_content()
-                                    if actress_name and actress_name.strip() not in actresses:
-                                        actresses.append(actress_name.strip())
-                                if actresses:
-                                    break
+                            try:
+                                actress_elems = await element.query_selector_all(selector)
+                                if actress_elems:
+                                    for actress_elem in actress_elems:
+                                        actress_name = await actress_elem.text_content()
+                                        if actress_name and actress_name.strip():
+                                            clean_name = actress_name.strip()
+                                            # Filter out non-actress links (common false positives)
+                                            if (clean_name not in actresses and 
+                                                len(clean_name) > 1 and 
+                                                clean_name not in ['詳細', '商品', '動画', 'サンプル', '画像', 'レビュー']):
+                                                actresses.append(clean_name)
+                                    if actresses:
+                                        logger.info(f"Found actresses with selector '{selector}': {actresses}")
+                                        break
+                            except Exception as e:
+                                logger.debug(f"Selector '{selector}' failed: {e}")
+                                continue
+                        
+                        # If no actresses found with specific selectors, try fallback methods
+                        if not actresses:
+                            # Fallback: Look for any links that might be actress names
+                            try:
+                                all_links = await element.query_selector_all("a")
+                                for link in all_links[:10]:  # Limit to first 10 links to avoid performance issues
+                                    href = await link.get_attribute('href') or ""
+                                    text = await link.text_content() or ""
+                                    title = await link.get_attribute('title') or ""
+                                    
+                                    # Check if this looks like an actress link
+                                    if (('actress' in href.lower() or 'performer' in href.lower()) and 
+                                        text.strip() and len(text.strip()) > 1 and
+                                        text.strip() not in ['詳細', '商品', '動画', 'サンプル', '画像', 'レビュー']):
+                                        clean_name = text.strip()
+                                        if clean_name not in actresses:
+                                            actresses.append(clean_name)
+                                            logger.info(f"Found actress via fallback: {clean_name} (href: {href})")
+                            except Exception as e:
+                                logger.debug(f"Fallback actress detection failed: {e}")
                         
                         # 女優名を文字列として結合
                         actress_names = ", ".join(actresses) if actresses else "不明"
+                        
+                        # Debug logging when no actresses found
+                        if not actresses:
+                            logger.debug(f"No actresses found for product: {title[:30]}...")
+                            # Log some HTML structure for debugging (first few elements)
+                            try:
+                                sample_html = await element.inner_html()
+                                logger.debug(f"Sample HTML structure: {sample_html[:500]}...")
+                            except:
+                                pass
                         
                         # 評価が基準以上の商品のみ追加
                         if rating >= MIN_RATING:
