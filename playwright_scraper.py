@@ -192,7 +192,7 @@ class PlaywrightFanzaScraper:
                                         image_url = image_url.replace('ps.jpg', 'pl.jpg')
                                     break
                         
-                        # 女優名（出演者情報）
+                        # 女優名（出演者情報）with URLs
                         actresses = []
                         actress_selectors = [
                             # Primary selector based on debug analysis - this should work!
@@ -214,22 +214,35 @@ class PlaywrightFanzaScraper:
                             "a[title*='出演']"
                         ]
                         
-                        # Try each selector and collect unique actress names
+                        # Try each selector and collect unique actress names with URLs
                         for selector in actress_selectors:
                             try:
                                 actress_elems = await element.query_selector_all(selector)
                                 if actress_elems:
                                     for actress_elem in actress_elems:
                                         actress_name = await actress_elem.text_content()
+                                        actress_href = await actress_elem.get_attribute('href') or ""
                                         if actress_name and actress_name.strip():
                                             clean_name = actress_name.strip()
                                             # Filter out non-actress links (common false positives)
-                                            if (clean_name not in actresses and 
-                                                len(clean_name) > 1 and 
-                                                clean_name not in ['詳細', '商品', '動画', 'サンプル', '画像', 'レビュー']):
-                                                actresses.append(clean_name)
+                                            if (len(clean_name) > 1 and 
+                                                clean_name not in ['詳細', '商品', '動画', 'サンプル', '画像', 'レビュー'] and
+                                                not any(a['name'] == clean_name for a in actresses)):
+                                                
+                                                # Build full URL if href is relative
+                                                if actress_href.startswith('/'):
+                                                    actress_url = f"https://www.dmm.co.jp{actress_href}"
+                                                elif actress_href.startswith('http'):
+                                                    actress_url = actress_href
+                                                else:
+                                                    actress_url = f"https://www.dmm.co.jp/{actress_href}"
+                                                
+                                                actresses.append({
+                                                    'name': clean_name,
+                                                    'url': actress_url
+                                                })
                                     if actresses:
-                                        logger.info(f"Found actresses with selector '{selector}': {actresses}")
+                                        logger.info(f"Found actresses with selector '{selector}': {[a['name'] for a in actresses]}")
                                         break
                             except Exception as e:
                                 logger.debug(f"Selector '{selector}' failed: {e}")
@@ -250,17 +263,28 @@ class PlaywrightFanzaScraper:
                                         text.strip() and len(text.strip()) > 1 and
                                         text.strip() not in ['詳細', '商品', '動画', 'サンプル', '画像', 'レビュー']):
                                         clean_name = text.strip()
-                                        if clean_name not in actresses:
-                                            actresses.append(clean_name)
+                                        if not any(a['name'] == clean_name for a in actresses):
+                                            # Build full URL if href is relative
+                                            if href.startswith('/'):
+                                                actress_url = f"https://www.dmm.co.jp{href}"
+                                            elif href.startswith('http'):
+                                                actress_url = href
+                                            else:
+                                                actress_url = f"https://www.dmm.co.jp/{href}"
+                                            
+                                            actresses.append({
+                                                'name': clean_name,
+                                                'url': actress_url
+                                            })
                                             logger.info(f"Found actress via fallback: {clean_name} (href: {href})")
                             except Exception as e:
                                 logger.debug(f"Fallback actress detection failed: {e}")
                         
-                        # 女優名を文字列として結合
-                        actress_names = ", ".join(actresses) if actresses else "不明"
+                        # Store actress data as list of dictionaries
+                        actress_names = actresses if actresses else []
                         
                         # Debug logging when no actresses found
-                        if not actresses:
+                        if not actress_names:
                             logger.debug(f"No actresses found for product: {title[:30]}...")
                             # Log some HTML structure for debugging (first few elements)
                             try:

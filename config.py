@@ -11,6 +11,59 @@ COMMAND_PREFIX = "!"
 FANZA_BASE_URL = "https://video.dmm.co.jp/av/list/"
 FANZA_SORT = "review_rank"
 
+# ソート設定
+SORT_OPTIONS = {
+    "suggest": {
+        "name": "🔍 おすすめ順",
+        "value": "suggest",
+        "description": "FANZAのおすすめ順で表示"
+    },
+    "ranking": {
+        "name": "📈 人気順", 
+        "value": "ranking",
+        "description": "人気順で表示"
+    },
+    "saleranking_asc": {
+        "name": "💰 売上本数順",
+        "value": "saleranking_asc", 
+        "description": "売上本数順で表示"
+    },
+    "date": {
+        "name": "🆕 新着順",
+        "value": "date",
+        "description": "新着順で表示"
+    },
+    "review_rank": {
+        "name": "⭐ 評価の高い順",
+        "value": "review_rank",
+        "description": "評価の高い順で表示（デフォルト）"
+    },
+    "bookmark_desc": {
+        "name": "❤️ お気に入り数順", 
+        "value": "bookmark_desc",
+        "description": "お気に入り数順で表示"
+    }
+}
+
+# リリース設定
+RELEASE_OPTIONS = {
+    "all": {
+        "name": "📅 全期間",
+        "value": None,
+        "description": "全期間の作品を表示"
+    },
+    "latest": {
+        "name": "🆕 最新作",
+        "value": "latest",
+        "description": "最新作のみ表示"
+    },
+    "recent": {
+        "name": "📺 準新作",
+        "value": "recent", 
+        "description": "準新作のみ表示"
+    }
+}
+
 # セールタイプの定義
 SALE_TYPES = {
     "all": {
@@ -38,20 +91,34 @@ SALE_TYPES = {
 # デフォルトのセールURL（全てのセール）
 FANZA_SALE_URL = f"{FANZA_BASE_URL}?key={'|'.join(SALE_TYPES['all']['keys'])}&sort={FANZA_SORT}"
 
-def get_sale_url(sale_type: str = "all", media_type: str = None) -> str:
-    """セールタイプとメディアタイプに応じたURLを生成"""
+def get_sale_url(sale_type: str = "all", media_type: str = None, sort_type: str = "review_rank", keyword: str = None, release_filter: str = None) -> str:
+    """セールタイプ、メディアタイプ、ソート、キーワード、リリースフィルターに応じたURLを生成"""
     if sale_type not in SALE_TYPES:
         sale_type = "all"
     
     keys = SALE_TYPES[sale_type]["keys"]
-    url = f"{FANZA_BASE_URL}?key={'|'.join(keys)}&sort={FANZA_SORT}"
+    
+    # ソートタイプの確認
+    sort_value = SORT_OPTIONS.get(sort_type, {}).get("value", FANZA_SORT)
+    
+    # ベースURL構築
+    url = f"{FANZA_BASE_URL}?key={'|'.join(keys)}&sort={sort_value}"
     
     # media_typeパラメータを追加
     if media_type == "2d":
         url += "&media_type=2d"
     elif media_type == "vr":
         url += "&media_type=vr"
-    # media_type=Noneまたはその他の場合は両方対応（パラメータなし）
+    
+    # キーワード検索パラメータを追加
+    if keyword and keyword.strip():
+        url += f"&keyword={keyword.strip()}"
+    
+    # リリースフィルターパラメータを追加
+    if release_filter and release_filter != "all":
+        release_value = RELEASE_OPTIONS.get(release_filter, {}).get("value")
+        if release_value:
+            url += f"&release={release_value}"
     
     return url
 MIN_RATING = 4.0
