@@ -363,9 +363,9 @@ class FanzaScraper:
     def __init__(self):
         self.playwright_scraper = PlaywrightFanzaScraper()
     
-    async def get_high_rated_products(self, url: str = None, max_items: Optional[int] = None) -> List[Dict[str, any]]:
+    async def get_high_rated_products(self, url: str = None, max_items: Optional[int] = None, force_refresh: bool = False) -> List[Dict[str, any]]:
         """高評価商品を取得"""
-        return await self.playwright_scraper.get_high_rated_products(url=url, max_items=max_items)
+        return await self.playwright_scraper.get_high_rated_products(url=url, max_items=max_items, force_refresh=force_refresh)
     
     def format_rating_stars(self, rating: float) -> str:
         """評価を星マークで表現"""
