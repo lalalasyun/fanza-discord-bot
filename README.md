@@ -2,7 +2,9 @@
 
 FANZAのセール情報から高評価作品を自動取得し、MissAVで動画検索もできる多機能Discord BOTです。
 
-**🆕 新機能**: MissAV検索機能を追加！タイトルや女優名で直接動画を検索できます。
+**🆕 新機能**: 
+- MissAV検索機能を追加！タイトルや女優名で直接動画を検索できます
+- FANZAセール情報にMissAV動画URLを自動追加！各作品の視聴リンクが表示されます
 
 ## ✨ 機能
 
@@ -13,6 +15,7 @@ FANZAのセール情報から高評価作品を自動取得し、MissAVで動画
 - 📊 **評価順表示** - 上位5作品を評価順で表示
 - 🎨 **美しいEmbed** - Discord Embedによる見やすい表示
 - ⚡ **キャッシュシステム** - 1時間のキャッシュでAPI負荷軽減
+- 🔗 **MissAV自動連携** - 各作品のMissAV視聴URLを自動検索・表示
 
 ### 🔍 MissAV検索機能 **NEW!**
 - 🎯 **タイトル検索** - 日本語タイトルで動画を直接検索
@@ -133,6 +136,7 @@ https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=21
     - 🏆 評価順（デフォルト） - 評価の高い順に表示
     - 🎲 ランダム - ランダムな順序で表示
     - 📋 リスト形式 - ページネーション付きコンパクト表示（5件/ページ、最大50件）
+  - **MissAV連携**: 各作品のMissAV視聴URLを自動で検索・表示
 
 #### 🔍 MissAV検索 **NEW!**
 - `/missav_search [タイトル]` - MissAVで動画を検索
@@ -213,6 +217,25 @@ sudo apt install -y libnss3 libnspr4 libasound2t64
 ## 🤝 コントリビューション
 
 プルリクエストやイシューの報告を歓迎します！
+
+### 🧪 PRのテスト方法（WSL環境）
+
+WSL環境では、PRブランチから直接Botをテストできます：
+
+```bash
+# PR番号を指定してテスト
+./update_bot_pr.sh 123
+
+# ブランチ名を指定してテスト
+./update_bot_pr.sh feature/new-feature
+```
+
+テスト後、mainブランチに戻るには：
+```bash
+./update_bot.sh
+```
+
+詳細は[WSL運用ガイド](README_WSL.md)を参照してください。
 
 ## ⚡ クイック起動コマンド
 
