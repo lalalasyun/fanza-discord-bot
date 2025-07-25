@@ -184,9 +184,15 @@ class PlaywrightFanzaScraper:
                 
                 # 結果を処理
                 for result in results:
-                    if isinstance(result, dict) and result.get('rating', 0) >= MIN_RATING:
-                        products.append(result)
-                        logger.info(f"Added product: {result['title'][:30]}... (Rating: {result['rating']})")
+                    if isinstance(result, dict):
+                        product_rating = result.get('rating', 0)
+                        logger.debug(f"Product: {result['title'][:30]}... Rating: {product_rating}")
+                        
+                        if product_rating >= MIN_RATING:
+                            products.append(result)
+                            logger.info(f"Added product: {result['title'][:30]}... (Rating: {product_rating})")
+                        elif product_rating > 0:
+                            logger.debug(f"Product below threshold: {result['title'][:30]}... (Rating: {product_rating}, Min: {MIN_RATING})")
                 
             finally:
                 await page.close()
@@ -234,11 +240,47 @@ class PlaywrightFanzaScraper:
                 if url and not url.startswith('http'):
                     url = f"https://www.dmm.co.jp{url}"
             
-            # 評価（星の画像の数をカウント）
+            # 評価（星の画像の数をカウント - 複数のセレクターを試行）
             rating = 0.0
-            star_images = await element.query_selector_all("img[src*='star/yellow']")
-            if star_images:
-                rating = len(star_images)
+            star_selectors = [
+                "img[src*='star/yellow']",
+                "img[src*='star']",
+                "img[alt*='星']",
+                "[class*='star']",
+                "[data-rating]",
+                ".star-rating img",
+                "img[src*='rating']"
+            ]
+            
+            for selector in star_selectors:
+                star_images = await element.query_selector_all(selector)
+                if star_images:
+                    rating = len(star_images)
+                    logger.debug(f"Found {rating} stars with selector: {selector}")
+                    break
+            
+            # 代替手段：評価テキストから抽出
+            if rating == 0.0:
+                rating_selectors = [
+                    "[class*='rating']",
+                    "[class*='review']",
+                    "span:has-text('★')",
+                    "*:has-text('評価')"
+                ]
+                for selector in rating_selectors:
+                    rating_elem = await element.query_selector(selector)
+                    if rating_elem:
+                        rating_text = await rating_elem.text_content()
+                        if rating_text:
+                            parsed_rating = self.parse_rating(rating_text)
+                            if parsed_rating > 0:
+                                rating = parsed_rating
+                                logger.debug(f"Found rating {rating} from text: {rating_text}")
+                                break
+            
+            # 評価が見つからない場合のデバッグ情報
+            if rating == 0.0:
+                logger.debug(f"No rating found for product: {title[:30]}...")
             
             # 価格
             price = "価格不明"
