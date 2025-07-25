@@ -6,8 +6,9 @@ import asyncio
 import logging
 import random
 import platform
+import re
 from datetime import datetime, timedelta
-from typing import Dict, List
+from typing import Dict, List, Optional
 from playwright_scraper import FanzaScraper  # Playwright版を使用
 from missav_scraper import MissAVScraper  # MissAV検索機能
 from config import (
@@ -35,6 +36,34 @@ missav_scraper = MissAVScraper()
 user_last_command: Dict[int, datetime] = {}
 
 
+async def search_missav_for_product(product: dict) -> Optional[str]:
+    """FANZA商品のタイトルでMissAVを検索してURLを取得"""
+    try:
+        # タイトルから不要な部分を削除して検索クエリを作成
+        title = product['title']
+        # 【】や（）内の情報を削除
+        title = re.sub(r'【[^】]*】', '', title)
+        title = re.sub(r'（[^）]*）', '', title)
+        title = re.sub(r'\([^)]*\)', '', title)
+        # 余分な空白を削除
+        title = ' '.join(title.split())
+        
+        if not title:
+            return None
+        
+        # MissAVで検索
+        videos = await missav_scraper.search_videos(title)
+        
+        if videos and len(videos) > 0:
+            # 最も関連性の高い動画のURLを返す
+            return videos[0].get('url')
+        
+    except Exception as e:
+        logger.error(f"Error searching MissAV for product: {e}")
+    
+    return None
+
+
 class FanzaEmbed(discord.Embed):
     """FANZA商品表示用のカスタムEmbed"""
     def __init__(self, product: dict):
@@ -50,6 +79,10 @@ class FanzaEmbed(discord.Embed):
         
         if product['url']:
             self.add_field(name="詳細", value=f"[商品ページを見る]({product['url']})", inline=False)
+        
+        # MissAV URLが存在する場合は追加
+        if product.get('missav_url'):
+            self.add_field(name="🎬 MissAV", value=f"[動画を視聴]({product['missav_url']})", inline=False)
         
         # 商品画像を設定
         if product.get('image_url'):
@@ -101,9 +134,15 @@ class PaginationView(View):
         
         for i, product in enumerate(current_products, start=start_idx + 1):
             rating_stars = scraper.format_rating_stars(product['rating'])
+            value_text = f"{rating_stars} ({product['rating']:.1f}) | {product['price']}\n[詳細を見る]({product['url']})"
+            
+            # MissAV URLが存在する場合は追加
+            if product.get('missav_url'):
+                value_text += f" | [🎬 MissAV]({product['missav_url']})"
+            
             embed.add_field(
                 name=f"{i}. {product['title']}",
-                value=f"{rating_stars} ({product['rating']:.1f}) | {product['price']}\n[詳細を見る]({product['url']})",
+                value=value_text,
                 inline=False
             )
         
@@ -352,6 +391,17 @@ async def fanza_sale(ctx):
             await processing_msg.edit(content="高評価の商品が見つかりませんでした。")
             return
         
+        # 各商品についてMissAVで検索（非同期で並列実行）
+        async def add_missav_url(product):
+            missav_url = await search_missav_for_product(product)
+            if missav_url:
+                product['missav_url'] = missav_url
+            return product
+        
+        # 並列でMissAV検索を実行（上位5件のみ）
+        products_to_search = products[:5]
+        products[:5] = await asyncio.gather(*[add_missav_url(product) for product in products_to_search])
+        
         # 処理中メッセージを削除
         await processing_msg.delete()
         
@@ -428,6 +478,16 @@ async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating
         if not products:
             await interaction.followup.send("❌ 現在、評価4.0以上の商品が見つかりませんでした。", ephemeral=True)
             return
+        
+        # 各商品についてMissAVで検索（非同期で並列実行）
+        async def add_missav_url(product):
+            missav_url = await search_missav_for_product(product)
+            if missav_url:
+                product['missav_url'] = missav_url
+            return product
+        
+        # 並列でMissAV検索を実行
+        products = await asyncio.gather(*[add_missav_url(product) for product in products])
         
         # セールタイプの表示名を取得
         sale_type_name = SALE_TYPES.get(sale_type, {}).get("name", "🎯 全てのセール")
