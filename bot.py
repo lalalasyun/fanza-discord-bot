@@ -77,6 +77,10 @@ class FanzaEmbed(discord.Embed):
         self.add_field(name="評価", value=f"{rating_stars} ({product['rating']:.1f})", inline=True)
         self.add_field(name="価格", value=product['price'], inline=True)
         
+        # 女優名を追加
+        if product.get('actresses'):
+            self.add_field(name="出演者", value=product['actresses'], inline=False)
+        
         if product['url']:
             self.add_field(name="詳細", value=f"[商品ページを見る]({product['url']})", inline=False)
         
@@ -134,7 +138,13 @@ class PaginationView(View):
         
         for i, product in enumerate(current_products, start=start_idx + 1):
             rating_stars = scraper.format_rating_stars(product['rating'])
-            value_text = f"{rating_stars} ({product['rating']:.1f}) | {product['price']}\n[詳細を見る]({product['url']})"
+            value_text = f"{rating_stars} ({product['rating']:.1f}) | {product['price']}"
+            
+            # 女優名を追加
+            if product.get('actresses') and product['actresses'] != "不明":
+                value_text += f"\n👥 出演: {product['actresses']}"
+            
+            value_text += f"\n[詳細を見る]({product['url']})"
             
             # MissAV URLが存在する場合は追加
             if product.get('missav_url'):

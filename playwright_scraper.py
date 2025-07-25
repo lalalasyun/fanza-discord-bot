@@ -192,6 +192,29 @@ class PlaywrightFanzaScraper:
                                         image_url = image_url.replace('ps.jpg', 'pl.jpg')
                                     break
                         
+                        # 女優名（出演者情報）
+                        actresses = []
+                        actress_selectors = [
+                            "[data-e2eid='performer'] a",
+                            "a[href*='/article/actress/']",
+                            ".performerName a",
+                            "a[href*='/performer/']",
+                            "div:has-text('出演者') + div a",
+                            "div:has-text('出演') a"
+                        ]
+                        for selector in actress_selectors:
+                            actress_elems = await element.query_selector_all(selector)
+                            if actress_elems:
+                                for actress_elem in actress_elems:
+                                    actress_name = await actress_elem.text_content()
+                                    if actress_name and actress_name.strip() not in actresses:
+                                        actresses.append(actress_name.strip())
+                                if actresses:
+                                    break
+                        
+                        # 女優名を文字列として結合
+                        actress_names = ", ".join(actresses) if actresses else "不明"
+                        
                         # 評価が基準以上の商品のみ追加
                         if rating >= MIN_RATING:
                             products.append({
@@ -199,7 +222,8 @@ class PlaywrightFanzaScraper:
                                 'rating': rating,
                                 'price': price,
                                 'url': url,
-                                'image_url': image_url
+                                'image_url': image_url,
+                                'actresses': actress_names
                             })
                             logger.info(f"Added product: {title[:30]}... (Rating: {rating}, Image: {bool(image_url)})")
                         
