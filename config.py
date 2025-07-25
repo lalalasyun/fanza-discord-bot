@@ -38,13 +38,22 @@ SALE_TYPES = {
 # デフォルトのセールURL（全てのセール）
 FANZA_SALE_URL = f"{FANZA_BASE_URL}?key={'|'.join(SALE_TYPES['all']['keys'])}&sort={FANZA_SORT}"
 
-def get_sale_url(sale_type: str = "all") -> str:
-    """セールタイプに応じたURLを生成"""
+def get_sale_url(sale_type: str = "all", media_type: str = None) -> str:
+    """セールタイプとメディアタイプに応じたURLを生成"""
     if sale_type not in SALE_TYPES:
         sale_type = "all"
     
     keys = SALE_TYPES[sale_type]["keys"]
-    return f"{FANZA_BASE_URL}?key={'|'.join(keys)}&sort={FANZA_SORT}"
+    url = f"{FANZA_BASE_URL}?key={'|'.join(keys)}&sort={FANZA_SORT}"
+    
+    # media_typeパラメータを追加
+    if media_type == "2d":
+        url += "&media_type=2d"
+    elif media_type == "vr":
+        url += "&media_type=vr"
+    # media_type=Noneまたはその他の場合は両方対応（パラメータなし）
+    
+    return url
 MIN_RATING = 4.0
 MAX_ITEMS = 50  # キャッシュする最大商品数（10ページ × 5件）
 # 表示設定

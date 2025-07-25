@@ -77,6 +77,10 @@ class FanzaEmbed(discord.Embed):
         self.add_field(name="評価", value=f"{rating_stars} ({product['rating']:.1f})", inline=True)
         self.add_field(name="価格", value=product['price'], inline=True)
         
+        # 女優名を追加
+        if product.get('actresses'):
+            self.add_field(name="出演者", value=product['actresses'], inline=False)
+        
         if product['url']:
             self.add_field(name="詳細", value=f"[商品ページを見る]({product['url']})", inline=False)
         
@@ -134,7 +138,13 @@ class PaginationView(View):
         
         for i, product in enumerate(current_products, start=start_idx + 1):
             rating_stars = scraper.format_rating_stars(product['rating'])
-            value_text = f"{rating_stars} ({product['rating']:.1f}) | {product['price']}\n[詳細を見る]({product['url']})"
+            value_text = f"{rating_stars} ({product['rating']:.1f}) | {product['price']}"
+            
+            # 女優名を追加
+            if product.get('actresses') and product['actresses'] != "不明":
+                value_text += f"\n👥 出演: {product['actresses']}"
+            
+            value_text += f"\n[詳細を見る]({product['url']})"
             
             # MissAV URLが存在する場合は追加
             if product.get('missav_url'):
@@ -435,10 +445,11 @@ async def fanza_sale(ctx):
 
 
 # スラッシュコマンド定義
-@bot.tree.command(name="fanza_sale", description="🎬 セール中の高評価AV作品を表示（MissAV視聴URL付き）")
+@bot.tree.command(name="fanza_sale", description="🎬 セール中の高評価AV作品を表示")
 @app_commands.describe(
     mode="表示モード: 評価順（デフォルト）、ランダム、リスト形式",
-    sale_type="セールタイプ: 全て、期間限定、割引、日替わり、激安"
+    sale_type="セールタイプ: 全て、期間限定、割引、日替わり、激安",
+    media_type="メディアタイプ: 全て（デフォルト）、2D動画のみ、VRのみ"
 )
 @app_commands.choices(
     mode=[
@@ -452,9 +463,14 @@ async def fanza_sale(ctx):
         app_commands.Choice(name="💸 割引セール (20-70% OFF)", value="percent"),
         app_commands.Choice(name="📅 日替わりセール", value="daily"),
         app_commands.Choice(name="💴 激安セール (10円/100円)", value="cheap"),
+    ],
+    media_type=[
+        app_commands.Choice(name="🎬 全て（2D+VR）", value="all"),
+        app_commands.Choice(name="📺 2D動画のみ", value="2d"),
+        app_commands.Choice(name="🥽 VRのみ", value="vr"),
     ]
 )
-async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating", sale_type: str = "all"):
+async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating", sale_type: str = "all", media_type: str = "all"):
     """スラッシュコマンド版: FANZAのセール中高評価作品を表示"""
     
     # NSFWチェック
@@ -469,14 +485,20 @@ async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating
         # 処理中メッセージ（defer で3秒の猶予を確保）
         await interaction.response.defer()
         
-        # セールタイプに応じたURLを生成
-        url = get_sale_url(sale_type)
+        # セールタイプとメディアタイプに応じたURLを生成
+        media_param = None if media_type == "all" else media_type
+        url = get_sale_url(sale_type, media_type=media_param)
         
         # 商品情報を取得
         products = await scraper.get_high_rated_products(url=url, sale_type=sale_type)
         
         if not products:
-            await interaction.followup.send("❌ 現在、評価4.0以上の商品が見つかりませんでした。", ephemeral=True)
+            media_text = {
+                "all": "商品",
+                "2d": "2D動画", 
+                "vr": "VR作品"
+            }.get(media_type, "商品")
+            await interaction.followup.send(f"❌ 現在、評価4.0以上の{media_text}が見つかりませんでした。", ephemeral=True)
             return
         
         # 各商品についてMissAVで検索（非同期で並列実行）
@@ -489,8 +511,18 @@ async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating
         # 並列でMissAV検索を実行
         products = await asyncio.gather(*[add_missav_url(product) for product in products])
         
-        # セールタイプの表示名を取得
+        # セールタイプとメディアタイプの表示名を取得
         sale_type_name = SALE_TYPES.get(sale_type, {}).get("name", "🎯 全てのセール")
+        media_emoji = {
+            "all": "🎬",
+            "2d": "📺",
+            "vr": "🥽"
+        }.get(media_type, "🎬")
+        media_text = {
+            "all": "作品",
+            "2d": "2D動画",
+            "vr": "VR作品"
+        }.get(media_type, "作品")
         
         # モードに応じて処理
         import random
@@ -498,16 +530,16 @@ async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating
         if mode == "random":
             # ランダムモード: 商品をシャッフルして5件選択
             products = random.sample(products, min(5, len(products)))
-            title = f"🎲 FANZAセール ランダム作品 - {sale_type_name}"
-            description = f"ランダムに選ばれた高評価作品です (5件)"
+            title = f"🎲 FANZAセール {media_emoji} {media_text} ランダム - {sale_type_name}"
+            description = f"ランダムに選ばれた高評価{media_text}です (5件)"
         elif mode == "list":
             # リストモード: 簡易表示
-            title = f"📋 FANZAセール 作品リスト - {sale_type_name}"
-            description = f"現在セール中の高評価作品一覧 ({len(products)}件)"
+            title = f"📋 FANZAセール {media_emoji} {media_text}リスト - {sale_type_name}"
+            description = f"現在セール中の高評価{media_text}一覧 ({len(products)}件)"
         else:
             # 評価順モード（デフォルト）- 最初の5件のみ表示
-            title = f"🎬 FANZAセール 高評価作品TOP5 - {sale_type_name}"
-            description = f"現在セール中の評価4.0以上の作品です (表示: 5件 / 全{len(products)}件)"
+            title = f"{media_emoji} FANZAセール 高評価{media_text}TOP5 - {sale_type_name}"
+            description = f"現在セール中の評価4.0以上の{media_text}です (表示: 5件 / 全{len(products)}件)"
             products = products[:5]  # 評価順とランダムモードは5件に制限
         
         # ヘッダーメッセージ
@@ -535,8 +567,13 @@ async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating
                 await asyncio.sleep(0.5)
         
         # フッターメッセージ
+        media_footer = {
+            "all": "🎬 2D+VR両方対応",
+            "2d": "📺 2D動画のみ対象", 
+            "vr": "🥽 VR作品のみ対象"
+        }.get(media_type, "🎬 2D+VR両方対応")
         footer_embed = discord.Embed(
-            description="💡 スラッシュコマンド `/help` でヘルプを表示\n⚠️ 価格は変動する可能性があります",
+            description=f"💡 スラッシュコマンド `/help` でヘルプを表示\n⚠️ 価格は変動する可能性があります\n{media_footer}",
             color=discord.Color.greyple()
         )
         footer_embed.set_footer(text=f"取得時刻: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -552,6 +589,7 @@ async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating
             logger.error(f"Failed to send error message: {e}")
         except Exception as e:
             logger.error(f"Unexpected error sending error message: {e}")
+
 
 
 @bot.tree.command(name="help", description="💡 FANZA Botの使用方法とコマンド一覧を表示")
@@ -571,14 +609,19 @@ async def slash_help(interaction: discord.Interaction):
         inline=False
     )
     embed.add_field(
-        name="🎯 `/fanza_sale`",
-        value="セール中の高評価作品（評価4.0以上）を最大5件表示\n**推奨コマンド**\n\n**表示モード:**\n• 🏆 評価順（デフォルト）\n• 🎲 ランダム\n• 📋 リスト形式\n\n**セールタイプ:**\n• 🎯 全て（デフォルト）\n• ⏰ 期間限定\n• 💸 割引セール\n• 📅 日替わり\n• 💴 激安セール",
-        inline=True
+        name="🎬 `/fanza_sale`",
+        value="セール中の高評価作品（評価4.0以上）を最大5件表示\n**推奨コマンド** | media_typeオプション対応",
+        inline=False
     )
     embed.add_field(
         name="💡 `/help`",
         value="このヘルプメッセージを表示\n（あなただけに見えます）",
         inline=True
+    )
+    embed.add_field(
+        name="⚙️ 共通オプション",
+        value="**表示モード:**\n• 🏆 評価順（デフォルト）\n• 🎲 ランダム\n• 📋 リスト形式\n\n**セールタイプ:**\n• 🎯 全て（デフォルト）\n• ⏰ 期間限定\n• 💸 割引セール\n• 📅 日替わり\n• 💴 激安セール\n\n**メディアタイプ NEW!:**\n• 🎬 全て（2D+VR）\n• 📺 2D動画のみ\n• 🥽 VRのみ",
+        inline=False
     )
     embed.add_field(
         name="🔍 `/missav_search`",
