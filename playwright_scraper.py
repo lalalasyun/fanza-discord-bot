@@ -24,6 +24,7 @@ class PlaywrightFanzaScraper:
         self.cache_timestamp_by_url = {}  # URL別のタイムスタンプ
         self._browser: Optional[Browser] = None
         self._context: Optional[BrowserContext] = None
+        self._playwright = None
 
     def parse_rating(self, rating_text: str) -> float:
         """評価テキストから数値を抽出"""
@@ -50,8 +51,9 @@ class PlaywrightFanzaScraper:
     async def _get_browser(self) -> Browser:
         """ブラウザインスタンスを取得（再利用）"""
         if self._browser is None or not self._browser.is_connected():
-            playwright = await async_playwright().start()
-            self._browser = await playwright.chromium.launch(
+            if self._playwright is None:
+                self._playwright = await async_playwright().start()
+            self._browser = await self._playwright.chromium.launch(
                 headless=True,
                 args=['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--disable-images']
             )
@@ -75,8 +77,11 @@ class PlaywrightFanzaScraper:
         if self._browser:
             await self._browser.close()
             self._browser = None
+        if self._playwright:
+            await self._playwright.stop()
+            self._playwright = None
 
-    async def get_high_rated_products(self, url: str = None, sale_type: str = "all") -> List[Dict[str, any]]:
+    async def get_high_rated_products(self, url: str = None, max_items: Optional[int] = None) -> List[Dict[str, any]]:
         """高評価商品を取得（キャッシュ機能付き）"""
         # URLが指定されていない場合はデフォルトURL
         if not url:
@@ -306,9 +311,9 @@ class FanzaScraper:
     def __init__(self):
         self.playwright_scraper = PlaywrightFanzaScraper()
     
-    async def get_high_rated_products(self, url: str = None, sale_type: str = "all") -> List[Dict[str, any]]:
+    async def get_high_rated_products(self, url: str = None, max_items: Optional[int] = None) -> List[Dict[str, any]]:
         """高評価商品を取得"""
-        return await self.playwright_scraper.get_high_rated_products(url=url, sale_type=sale_type)
+        return await self.playwright_scraper.get_high_rated_products(url=url, max_items=max_items)
     
     def format_rating_stars(self, rating: float) -> str:
         """評価を星マークで表現"""

@@ -525,7 +525,7 @@ async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating
         )
         
         # 商品情報を取得
-        products = await scraper.get_high_rated_products(url=url, sale_type=sale_type)
+        products = await scraper.get_high_rated_products(url=url)
         
         if not products:
             media_text = {
@@ -976,11 +976,6 @@ async def missav_search(interaction: discord.Interaction, title: str):
             logger.error("Failed to send error message")
 
 
-@bot.event
-async def on_ready():
-    """Botが起動したときのイベント"""
-    logger.info(f'{bot.user} has logged in')
-
 async def cleanup():
     """クリーンアップ処理"""
     try:
@@ -1003,7 +998,6 @@ def main():
         logger.error(f"Failed to run bot: {e}")
     finally:
         # クリーンアップ処理を実行
-        import asyncio
         try:
             asyncio.run(cleanup())
         except Exception as e:
