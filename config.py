@@ -66,4 +66,4 @@ LOG_LEVEL = "INFO"
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
 # Bot バージョン
-BOT_VERSION = "2.1.0"
+BOT_VERSION = "2.2.0"

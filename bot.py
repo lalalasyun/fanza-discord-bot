@@ -435,7 +435,7 @@ async def fanza_sale(ctx):
 
 
 # スラッシュコマンド定義
-@bot.tree.command(name="fanza_sale", description="🎬 セール中の高評価AV作品(評価4.0以上)を表示")
+@bot.tree.command(name="fanza_sale", description="🎬 セール中の高評価AV作品を表示（MissAV視聴URL付き）")
 @app_commands.describe(
     mode="表示モード: 評価順（デフォルト）、ランダム、リスト形式",
     sale_type="セールタイプ: 全て、期間限定、割引、日替わり、激安"
