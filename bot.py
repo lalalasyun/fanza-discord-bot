@@ -573,6 +573,14 @@ async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating
             timestamp=datetime.now()
         )
         header_embed.set_thumbnail(url="https://i.imgur.com/fanza_logo.png")
+        
+        # 検索URLを追加
+        header_embed.add_field(
+            name="🔗 検索URL",
+            value=f"[FANZAで直接確認する]({url})",
+            inline=False
+        )
+        
         await interaction.followup.send(embed=header_embed)
         
         # モードに応じた表示
