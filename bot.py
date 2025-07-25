@@ -597,12 +597,6 @@ async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating
                 await interaction.followup.send(embed=embed)
                 await asyncio.sleep(0.5)
         
-        # ヘルプメッセージ
-        help_embed = discord.Embed(
-            description="💡 スラッシュコマンド `/help` でヘルプを表示",
-            color=discord.Color.greyple()
-        )
-        await interaction.followup.send(embed=help_embed)
         
     except Exception as e:
         logger.error(f"Error in slash fanza_sale command: {e}")
