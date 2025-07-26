@@ -162,7 +162,7 @@ python bot.py
 https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=2147483648&scope=bot%20applications.commands
 ```
 
-## 🆕 v2.3.0 新機能ハイライト
+## 🆕 v2.2.0 新機能ハイライト
 
 ### 🔄 コマンド名変更: `fanza_sale` → `fanza_search`
 より直感的で分かりやすいコマンド名に変更しました。
