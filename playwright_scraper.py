@@ -186,13 +186,15 @@ class PlaywrightFanzaScraper:
                 for result in results:
                     if isinstance(result, dict) and result.get('title'):
                         product_rating = result.get('rating', 0)
-                        logger.debug(f"Product: {result['title'][:30]}... Rating: {product_rating}")
+                        logger.info(f"Product: {result['title'][:30]}... Rating: {product_rating}")
                         
                         if product_rating >= MIN_RATING:
                             products.append(result)
                             logger.info(f"Added product: {result['title'][:30]}... (Rating: {product_rating})")
                         elif product_rating > 0:
-                            logger.debug(f"Product below threshold: {result['title'][:30]}... (Rating: {product_rating}, Min: {MIN_RATING})")
+                            logger.info(f"Product below threshold: {result['title'][:30]}... (Rating: {product_rating}, Min: {MIN_RATING})")
+                        else:
+                            logger.info(f"Product with zero rating: {result['title'][:30]}...")
                 
             finally:
                 await page.close()
@@ -256,7 +258,7 @@ class PlaywrightFanzaScraper:
                 star_images = await element.query_selector_all(selector)
                 if star_images:
                     rating = len(star_images)
-                    logger.debug(f"Found {rating} stars with selector: {selector}")
+                    logger.info(f"Found {rating} stars with selector: {selector}")
                     break
             
             # 代替手段：評価テキストから抽出
@@ -275,12 +277,18 @@ class PlaywrightFanzaScraper:
                             parsed_rating = self.parse_rating(rating_text)
                             if parsed_rating > 0:
                                 rating = parsed_rating
-                                logger.debug(f"Found rating {rating} from text: {rating_text}")
+                                logger.info(f"Found rating {rating} from text: {rating_text}")
                                 break
             
             # 評価が見つからない場合のデバッグ情報
             if rating == 0.0:
-                logger.debug(f"No rating found for product: {title[:30]}...")
+                logger.info(f"No rating found for product: {title[:30]}...")
+                # デバッグ用：要素の内部HTMLを出力
+                try:
+                    inner_html = await element.inner_html()
+                    logger.debug(f"Element HTML preview: {inner_html[:500]}...")
+                except:
+                    pass
             
             # 価格
             price = "価格不明"
