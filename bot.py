@@ -99,7 +99,7 @@ class FanzaEmbed(discord.Embed):
         if product.get('image_url'):
             self.set_image(url=product['image_url'])
         
-        self.set_footer(text="FANZA セール情報")
+        self.set_footer(text="FANZA 作品情報")
 
 
 class PaginationView(View):
@@ -138,7 +138,7 @@ class PaginationView(View):
         current_products = self.products[start_idx:end_idx]
         
         embed = discord.Embed(
-            title=f"📋 FANZAセール 作品リスト (ページ {self.current_page + 1}/{self.total_pages})",
+            title=f"📋 FANZA 作品リスト (ページ {self.current_page + 1}/{self.total_pages})",
             color=discord.Color.blue(),
             timestamp=datetime.now()
         )
@@ -169,7 +169,7 @@ class PaginationView(View):
                 inline=False
             )
         
-        embed.set_footer(text=f"ページ {self.current_page + 1}/{self.total_pages} | FANZA セール情報")
+        embed.set_footer(text=f"ページ {self.current_page + 1}/{self.total_pages} | FANZA 作品情報")
         return embed
     
     @discord.ui.button(label="◀ 前へ", style=discord.ButtonStyle.primary, disabled=True)
@@ -225,7 +225,7 @@ async def setup_bot_profile():
         # BOTのアクティビティステータスを設定
         activity = discord.Activity(
             type=discord.ActivityType.watching, 
-            name="🎬 FANZAセール情報 | /fanza_sale"
+            name="🎬 FANZA作品検索 | /fanza_search"
         )
         
         # BOTのステータスを設定（オンライン状態）
@@ -247,13 +247,13 @@ async def dynamic_status_updater():
     """BOTのステータスを動的に更新"""
     # テンプレートベースのステータスメッセージ定義
     status_message_definitions = [
-        ("🎬 FANZAセール情報 | /fanza_sale", False),
+        ("🎬 FANZA作品検索 | /fanza_search", False),
         ("⭐ 高評価作品を検索中...", False),
-        ("🎯 全てのセール | /fanza_sale", False),
-        ("⏰ 期間限定セール | /fanza_sale", False),
-        ("💸 割引セール情報 | /fanza_sale", False),
-        ("📅 日替わりセール | /fanza_sale", False),
-        ("💴 激安セール情報 | /fanza_sale", False),
+        ("🔍 作品検索 | /fanza_search", False),
+        ("⏰ セールフィルター | /fanza_search", False),
+        ("💸 高評価作品 | /fanza_search", False),
+        ("📅 日替わりセール | /fanza_search", False),
+        ("💴 激安セール | /fanza_search", False),
         ("💡 /help でヘルプ表示", False),
         ("🏠 {guild_count}のサーバーで稼働中", True),  # 動的データが必要
     ]
@@ -405,14 +405,14 @@ async def check_rate_limit_interaction(interaction: discord.Interaction) -> bool
     return True
 
 
-@bot.command(name='fanza_sale')
+@bot.command(name='fanza_search')
 @check_nsfw_channel()
 @check_rate_limit()
-async def fanza_sale(ctx):
-    """FANZAのセール中高評価作品を表示"""
+async def fanza_search(ctx):
+    """FANZAの高評価作品を表示"""
     try:
         # 処理中メッセージ
-        processing_msg = await ctx.send("セール情報を取得中... 🔍")
+        processing_msg = await ctx.send("商品情報を取得中... 🔍")
         
         # 商品情報を取得
         products = await scraper.get_high_rated_products()
@@ -437,8 +437,8 @@ async def fanza_sale(ctx):
         
         # ヘッダーメッセージ
         header_embed = discord.Embed(
-            title="🎬 FANZAセール 高評価作品TOP5",
-            description="現在セール中の評価4.0以上の作品です",
+            title="🎬 FANZA 高評価作品TOP5",
+            description="評価4.0以上の作品です",
             color=discord.Color.gold(),
             timestamp=datetime.now()
         )
@@ -460,15 +460,15 @@ async def fanza_sale(ctx):
         await ctx.send(embed=footer_embed)
         
     except Exception as e:
-        logger.error(f"Error in fanza_sale command: {e}")
+        logger.error(f"Error in fanza_search command: {e}")
         await ctx.send("エラーが発生しました。管理者にお問い合わせください。")
 
 
 # スラッシュコマンド定義
-@bot.tree.command(name="fanza_sale", description="🎬 セール中の高評価AV作品を表示")
+@bot.tree.command(name="fanza_search", description="🎬 FANZA高評価AV作品を検索")
 @app_commands.describe(
     mode="表示モード: 評価順（デフォルト）、ランダム、リスト形式",
-    sale_type="セールタイプ: 全て、期間限定、割引、日替わり、激安",
+    sale_type="セールフィルター: なし（デフォルト）、期間限定、割引、日替わり、激安、全てのセール",
     media_type="メディアタイプ: 全て（デフォルト）、2D動画のみ、VRのみ",
     sort_type="ソート順: 評価順（デフォルト）、おすすめ順、人気順、売上順、新着順、お気に入り順",
     keyword="キーワード検索: 作品名、女優名などで絞り込み",
@@ -483,11 +483,12 @@ async def fanza_sale(ctx):
         app_commands.Choice(name="📋 リスト形式", value="list"),
     ],
     sale_type=[
-        app_commands.Choice(name="🎯 全てのセール", value="all"),
+        app_commands.Choice(name="🔍 セールフィルターなし（デフォルト）", value="none"),
         app_commands.Choice(name="⏰ 期間限定セール", value="limited"),
         app_commands.Choice(name="💸 割引セール (20-70% OFF)", value="percent"),
         app_commands.Choice(name="📅 日替わりセール", value="daily"),
         app_commands.Choice(name="💴 激安セール (10円/100円)", value="cheap"),
+        app_commands.Choice(name="🎯 全てのセール", value="all"),
     ],
     media_type=[
         app_commands.Choice(name="🎬 全て（2D+VR）", value="all"),
@@ -508,8 +509,8 @@ async def fanza_sale(ctx):
         app_commands.Choice(name="📺 準新作", value="recent"),
     ]
 )
-async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating", sale_type: str = "all", media_type: str = "all", sort_type: str = "review_rank", keyword: Optional[str] = None, release_filter: str = "all", count: app_commands.Range[int, 1, 10] = 5, force_refresh: bool = False):
-    """スラッシュコマンド版: FANZAのセール中高評価作品を表示"""
+async def slash_fanza_search(interaction: discord.Interaction, mode: str = "rating", sale_type: str = "none", media_type: str = "all", sort_type: str = "review_rank", keyword: Optional[str] = None, release_filter: str = "all", count: app_commands.Range[int, 1, 10] = 5, force_refresh: bool = False):
+    """スラッシュコマンド版: FANZAの高評価作品を検索"""
     
     # NSFWチェック
     if not await check_nsfw_interaction(interaction):
@@ -542,7 +543,7 @@ async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating
                 "2d": "2D動画", 
                 "vr": "VR作品"
             }.get(media_type, "商品")
-            await interaction.followup.send(f"❌ 現在、評価4.0以上の{media_text}が見つかりませんでした。", ephemeral=True)
+            await interaction.followup.send(f"❌ 評価4.0以上の{media_text}が見つかりませんでした。", ephemeral=True)
             return
         
         # 各商品についてMissAVで検索（非同期で並列実行）
@@ -574,16 +575,16 @@ async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating
         if mode == "random":
             # ランダムモード: 商品をシャッフルして指定件数選択
             products = random.sample(products, min(count, len(products)))
-            title = f"🎲 FANZAセール {media_emoji} {media_text} ランダム - {sale_type_name}"
+            title = f"🎲 FANZA {media_emoji} {media_text} ランダム - {sale_type_name}"
             description = f"ランダムに選ばれた高評価{media_text}です ({count}件)"
         elif mode == "list":
             # リストモード: 簡易表示
-            title = f"📋 FANZAセール {media_emoji} {media_text}リスト - {sale_type_name}"
-            description = f"現在セール中の高評価{media_text}一覧 ({len(products)}件)"
+            title = f"📋 FANZA {media_emoji} {media_text}リスト - {sale_type_name}"
+            description = f"高評価{media_text}一覧 ({len(products)}件)"
         else:
             # 評価順モード（デフォルト）- 指定件数のみ表示
-            title = f"{media_emoji} FANZAセール 高評価{media_text}TOP{count} - {sale_type_name}"
-            description = f"現在セール中の評価4.0以上の{media_text}です (表示: {count}件 / 全{len(products)}件)"
+            title = f"{media_emoji} FANZA 高評価{media_text}TOP{count} - {sale_type_name}"
+            description = f"評価4.0以上の{media_text}です (表示: {count}件 / 全{len(products)}件)"
             products = products[:count]  # 評価順とランダムモードは指定件数に制限
         
         # ヘッダーメッセージ
@@ -619,7 +620,7 @@ async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating
         
         
     except Exception as e:
-        logger.error(f"Error in slash fanza_sale command: {e}")
+        logger.error(f"Error in slash fanza_search command: {e}")
         try:
             await interaction.followup.send("❌ エラーが発生しました。しばらく時間をおいてから再試行してください。", ephemeral=True)
         except discord.NotFound:
@@ -810,17 +811,17 @@ class BotInfoView(View):
     def __init__(self):
         super().__init__(timeout=300)  # 5分でタイムアウト
     
-    @discord.ui.button(label="🎬 セール検索", style=discord.ButtonStyle.primary, emoji="🎬")
-    async def sale_search_button(self, interaction: discord.Interaction, button: Button):
-        """セール検索ボタン"""
+    @discord.ui.button(label="🎬 作品検索", style=discord.ButtonStyle.primary, emoji="🎬")
+    async def product_search_button(self, interaction: discord.Interaction, button: Button):
+        """作品検索ボタン"""
         embed = discord.Embed(
-            title="🎬 FANZAセール検索",
-            description="以下のコマンドでセール作品を検索できます",
+            title="🎬 FANZA作品検索",
+            description="以下のコマンドでFANZA作品を検索できます",
             color=discord.Color.green()
         )
         embed.add_field(
             name="💡 使用方法",
-            value="`/fanza_sale` コマンドを使用してください\n\n**オプション:**\n• 表示モード: 評価順/ランダム/リスト\n• セールタイプ: 全て/期間限定/割引/日替わり/激安",
+            value="`/fanza_search` コマンドを使用してください\n\n**オプション:**\n• 表示モード: 評価順/ランダム/リスト\n• セールフィルター: なし/期間限定/割引/日替わり/激安/全セール",
             inline=False
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -835,7 +836,7 @@ class BotInfoView(View):
         )
         embed.add_field(
             name="📋 主要コマンド",
-            value="• `/fanza_sale` - セール作品検索\n• `/help` - 詳細ヘルプ\n• `/bot_info` - BOT情報表示",
+            value="• `/fanza_search` - FANZA作品検索\n• `/help` - 詳細ヘルプ\n• `/bot_info` - BOT情報表示",
             inline=False
         )
         embed.add_field(

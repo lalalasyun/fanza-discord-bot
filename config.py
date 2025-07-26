@@ -66,6 +66,10 @@ RELEASE_OPTIONS = {
 
 # セールタイプの定義
 SALE_TYPES = {
+    "none": {
+        "name": "🔍 セールフィルターなし",
+        "keys": []
+    },
     "all": {
         "name": "🎯 全てのセール",
         "keys": ["期間限定セール", "20％OFF", "30％OFF", "50％OFF", "70％OFF", "日替わりセール", "10円セール", "100円セール"]
@@ -88,27 +92,33 @@ SALE_TYPES = {
     }
 }
 
-# デフォルトのセールURL（全てのセール）
-FANZA_SALE_URL = f"{FANZA_BASE_URL}?key={'|'.join(SALE_TYPES['all']['keys'])}&sort={FANZA_SORT}"
+# デフォルトの検索URL（セールフィルターなし）
+FANZA_SALE_URL = f"{FANZA_BASE_URL}?sort={FANZA_SORT}"
 
-def get_sale_url(sale_type: str = "all", media_type: str = None, sort_type: str = "review_rank", keyword: str = None, release_filter: str = None) -> str:
+def get_sale_url(sale_type: str = "none", media_type: str = None, sort_type: str = "review_rank", keyword: str = None, release_filter: str = None) -> str:
     """セールタイプ、メディアタイプ、ソート、キーワード、リリースフィルターに応じたURLを生成"""
     if sale_type not in SALE_TYPES:
-        sale_type = "all"
+        sale_type = "none"
     
     keys = SALE_TYPES[sale_type]["keys"]
     
-    # キーワードが指定されている場合は、セールキーと結合
+    # キーワードまたはセールキーが存在する場合のみkeyパラメータを追加
+    key_parts = []
     if keyword and keyword.strip():
-        key_param = f"{keyword.strip()}+{'|'.join(keys)}"
-    else:
-        key_param = '|'.join(keys)
+        key_parts.append(keyword.strip())
+    if keys:
+        key_parts.append('|'.join(keys))
     
     # ソートタイプの確認
     sort_value = SORT_OPTIONS.get(sort_type, {}).get("value", FANZA_SORT)
     
     # ベースURL構築
-    url = f"{FANZA_BASE_URL}?key={key_param}&sort={sort_value}"
+    url = f"{FANZA_BASE_URL}?sort={sort_value}"
+    
+    # keyパラメータがある場合のみ追加
+    if key_parts:
+        key_param = '+'.join(key_parts)
+        url += f"&key={key_param}"
     
     # media_typeパラメータを追加
     if media_type == "2d":
