@@ -309,15 +309,16 @@ class PlaywrightFanzaScraper:
             # 商品画像URL（最初の有効なものを使用）
             image_url = ""
             image_selectors = [
-                "img[data-e2eid='content-image']",
-                "img[src*='pics.dmm.co.jp']",
-                "img[src*='dmm.com']"
+                "a[href*='/detail/'] img",  # 商品リンク内の画像
+                "picture img",              # picture要素内の画像
+                "img[loading='lazy']",      # 遅延読み込み画像
+                "img[alt]"                  # altタグがある画像
             ]
             for selector in image_selectors:
                 img_elem = await element.query_selector(selector)
                 if img_elem:
                     image_url = await img_elem.get_attribute('src')
-                    if image_url and ('dmm' in image_url or 'pics' in image_url):
+                    if image_url and ('awsimgsrc.dmm.co.jp' in image_url or 'pics.dmm.co.jp' in image_url):
                         # 高解像度版に変換
                         if 'ps.jpg' in image_url:
                             image_url = image_url.replace('ps.jpg', 'pl.jpg')
