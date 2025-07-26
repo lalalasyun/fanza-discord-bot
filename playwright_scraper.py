@@ -142,17 +142,15 @@ class PlaywrightFanzaScraper:
                 
                 # 商品リストの要素を直接待機（タイムアウト短縮）
                 try:
-                    await page.wait_for_selector("[data-e2eid='content-card'], li[class*='border border-gray-300']", timeout=10000)
+                    await page.wait_for_selector("[data-e2eid='content-card']", timeout=10000)
                 except:
                     logger.warning("Product selector not found within timeout")
-                    return []
                 
                 # 商品要素を探す（最初に見つかったセレクターを使用）
                 product_selectors = [
                     "[data-e2eid='content-card']",
-                    "li[class*='border border-gray-300']",
                     "div[data-e2eid='content-card']",
-                    "li:has(div[data-e2eid='content-card'])",
+                    "article[data-e2eid='content-card']"
                 ]
                 
                 product_elements = None
@@ -186,15 +184,15 @@ class PlaywrightFanzaScraper:
                 for result in results:
                     if isinstance(result, dict) and result.get('title'):
                         product_rating = result.get('rating', 0)
-                        logger.info(f"Product: {result['title'][:30]}... Rating: {product_rating}")
+                        logger.debug(f"Product: {result['title'][:30]}... Rating: {product_rating}")
                         
                         if product_rating >= MIN_RATING:
                             products.append(result)
-                            logger.info(f"Added product: {result['title'][:30]}... (Rating: {product_rating})")
+                            logger.debug(f"Added product: {result['title'][:30]}... (Rating: {product_rating})")
                         elif product_rating > 0:
-                            logger.info(f"Product below threshold: {result['title'][:30]}... (Rating: {product_rating}, Min: {MIN_RATING})")
+                            logger.debug(f"Product below threshold: {result['title'][:30]}... (Rating: {product_rating}, Min: {MIN_RATING})")
                         else:
-                            logger.info(f"Product with zero rating: {result['title'][:30]}...")
+                            logger.debug(f"Product with zero rating: {result['title'][:30]}...")
                 
             finally:
                 await page.close()
@@ -215,19 +213,28 @@ class PlaywrightFanzaScraper:
         try:
             # タイトル
             title = ""
-            title_selectors = [
-                "a[data-e2eid='title']",
-                "a[href*='/detail/']",
-                "span.hover\\:underline",
-                "a span.hover\\:underline"
-            ]
-            for selector in title_selectors:
-                title_elem = await element.query_selector(selector)
-                if title_elem:
-                    title = await title_elem.text_content()
-                    title = title.strip() if title else ""
-                    if title:
-                        break
+            # まず画像のaltタグから取得を試みる
+            title_img = await element.query_selector("a[href*='/detail/'] img")
+            if title_img:
+                title = await title_img.get_attribute('alt')
+                if title:
+                    title = title.strip()
+            
+            # altタグが空の場合は他のセレクターを試す
+            if not title:
+                title_selectors = [
+                    "a[data-e2eid='title']",
+                    "a[href*='/detail/']",
+                    "span.hover\\:underline",
+                    "a span.hover\\:underline"
+                ]
+                for selector in title_selectors:
+                    title_elem = await element.query_selector(selector)
+                    if title_elem:
+                        title = await title_elem.text_content()
+                        title = title.strip() if title else ""
+                        if title:
+                            break
             
             if not title:
                 return {}
@@ -245,8 +252,9 @@ class PlaywrightFanzaScraper:
             # 評価（星の画像の数をカウント - 複数のセレクターを試行）
             rating = 0.0
             star_selectors = [
+                "img[src*='icon/star/yellow.svg']",  # 正確なセレクター
                 "img[src*='star/yellow']",
-                "img[src*='star']",
+                "img[src*='star'][alt='']",  # 空のaltタグの星画像
                 "img[alt*='星']",
                 "[class*='star']",
                 "[data-rating]",
@@ -258,7 +266,7 @@ class PlaywrightFanzaScraper:
                 star_images = await element.query_selector_all(selector)
                 if star_images:
                     rating = len(star_images)
-                    logger.info(f"Found {rating} stars with selector: {selector}")
+                    logger.debug(f"Found {rating} stars with selector: {selector}")
                     break
             
             # 代替手段：評価テキストから抽出
@@ -277,12 +285,12 @@ class PlaywrightFanzaScraper:
                             parsed_rating = self.parse_rating(rating_text)
                             if parsed_rating > 0:
                                 rating = parsed_rating
-                                logger.info(f"Found rating {rating} from text: {rating_text}")
+                                logger.debug(f"Found rating {rating} from text: {rating_text}")
                                 break
             
             # 評価が見つからない場合のデバッグ情報
             if rating == 0.0:
-                logger.info(f"No rating found for product: {title[:30]}...")
+                logger.debug(f"No rating found for product: {title[:30]}...")
                 # デバッグ用：要素の内部HTMLを出力
                 try:
                     inner_html = await element.inner_html()
