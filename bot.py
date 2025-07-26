@@ -388,10 +388,17 @@ async def check_rate_limit_interaction(interaction: discord.Interaction) -> bool
         time_since_last = now - user_last_command[user_id]
         if time_since_last < timedelta(seconds=RATE_LIMIT_DURATION):
             remaining = RATE_LIMIT_DURATION - time_since_last.total_seconds()
-            await interaction.response.send_message(
-                f"レート制限中です。あと{remaining:.0f}秒お待ちください。", 
-                ephemeral=True
-            )
+            # interaction.responseが既に使われている場合はfollowupを使用
+            if interaction.response.is_done():
+                await interaction.followup.send(
+                    f"レート制限中です。あと{remaining:.0f}秒お待ちください。", 
+                    ephemeral=True
+                )
+            else:
+                await interaction.response.send_message(
+                    f"レート制限中です。あと{remaining:.0f}秒お待ちください。", 
+                    ephemeral=True
+                )
             return False
     
     user_last_command[user_id] = now
@@ -508,13 +515,13 @@ async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating
     if not await check_nsfw_interaction(interaction):
         return
     
-    # レート制限チェック
-    if not await check_rate_limit_interaction(interaction):
-        return
-    
     try:
         # 処理中メッセージ（defer で3秒の猶予を確保）
         await interaction.response.defer()
+        
+        # レート制限チェック（defer後に実行）
+        if not await check_rate_limit_interaction(interaction):
+            return
         
         # セールタイプ、メディアタイプ、ソート、キーワード、リリースフィルターに応じたURLを生成
         media_param = None if media_type == "all" else media_type
