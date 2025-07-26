@@ -812,7 +812,7 @@ class BotInfoView(View):
         super().__init__(timeout=300)  # 5分でタイムアウト
     
     @discord.ui.button(label="🎬 作品検索", style=discord.ButtonStyle.primary, emoji="🎬")
-    async def sale_search_button(self, interaction: discord.Interaction, button: Button):
+    async def product_search_button(self, interaction: discord.Interaction, button: Button):
         """作品検索ボタン"""
         embed = discord.Embed(
             title="🎬 FANZA作品検索",

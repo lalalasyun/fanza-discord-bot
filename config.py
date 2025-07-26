@@ -92,8 +92,8 @@ SALE_TYPES = {
     }
 }
 
-# デフォルトのセールURL（全てのセール）
-FANZA_SALE_URL = f"{FANZA_BASE_URL}?key={'|'.join(SALE_TYPES['all']['keys'])}&sort={FANZA_SORT}"
+# デフォルトの検索URL（セールフィルターなし）
+FANZA_SALE_URL = f"{FANZA_BASE_URL}?sort={FANZA_SORT}"
 
 def get_sale_url(sale_type: str = "none", media_type: str = None, sort_type: str = "review_rank", keyword: str = None, release_filter: str = None) -> str:
     """セールタイプ、メディアタイプ、ソート、キーワード、リリースフィルターに応じたURLを生成"""
