@@ -56,7 +56,7 @@ https://discord.com/api/oauth2/authorize?client_id=1378875279556214804&permissio
 
 ### 2. NSFWチャンネルで使用
 チャンネル設定でNSFWを有効化してから以下のコマンドを使用：
-- `/fanza_sale` - セール中の高評価作品を表示（強化されたフィルタリング・ソートオプション対応）
+- `/fanza_search` - FANZAの高評価作品を検索（セールフィルターオプション対応）
 - `/missav_search [タイトル]` - MissAVで動画を検索
 - `/help` - ヘルプを表示
 
@@ -148,7 +148,7 @@ https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=21
 ### スラッシュコマンド（推奨）
 
 #### 🎬 FANZA関連
-- `/fanza_sale` - セール中の高評価作品を表示
+- `/fanza_search` - FANZAの高評価作品を検索
 
 **オプション**:
 - `mode` オプション:
@@ -156,11 +156,12 @@ https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=21
   - 🎲 ランダム - ランダムな順序で表示
   - 📋 リスト形式 - ページネーション付きコンパクト表示（5件/ページ、最大50件）
 - `sale_type` オプション:
-  - 🎯 全てのセール（デフォルト）
+  - 🔍 セールフィルターなし（デフォルト）
   - ⏰ 期間限定セール
   - 💸 割引セール (20-70% OFF)
   - 📅 日替わりセール
   - 💴 激安セール (10円/100円)
+  - 🎯 全てのセール
 - `media_type` オプション:
   - 🎬 全て（2D+VR）（デフォルト）
   - 📺 2D動画のみ
@@ -191,19 +192,19 @@ https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=21
 **使用例**:
 ```
 # 基本的な使用
-/fanza_sale mode:評価順 sale_type:全てのセール media_type:全て
+/fanza_search mode:評価順 sale_type:なし media_type:全て
 
 # ソートとフィルターを組み合わせ
-/fanza_sale mode:ランダム sale_type:割引セール sort_type:人気順 count:8
+/fanza_search mode:ランダム sale_type:割引セール sort_type:人気順 count:8
 
-# キーワード検索（セールキーと自動結合）
-/fanza_sale keyword:巨乳 sort_type:お気に入り数順 count:10
+# キーワード検索
+/fanza_search keyword:巨乳 sort_type:お気に入り数順 count:10
 
 # 最新作のみを表示
-/fanza_sale sort_type:新着順 release_filter:最新作 count:3
+/fanza_search sort_type:新着順 release_filter:最新作 count:3
 
 # キャッシュを無視して最新データを取得
-/fanza_sale force_refresh:true
+/fanza_search force_refresh:true
 ```
 
 #### 🔍 MissAV検索 **NEW!**
@@ -222,7 +223,7 @@ https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=21
 - `/bot_info` - BOTの詳細情報とステータスを表示
 
 ### プレフィックスコマンド（レガシー対応）
-- `!fanza_sale` - セール中の高評価作品を表示
+- `!fanza_search` - FANZAの高評価作品を検索
 - `!help_fanza` - ヘルプを表示
 - `!sync` - スラッシュコマンドを手動同期（オーナー専用）
 
