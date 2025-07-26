@@ -184,7 +184,7 @@ class PlaywrightFanzaScraper:
                 
                 # 結果を処理
                 for result in results:
-                    if isinstance(result, dict):
+                    if isinstance(result, dict) and result.get('title'):
                         product_rating = result.get('rating', 0)
                         logger.debug(f"Product: {result['title'][:30]}... Rating: {product_rating}")
                         
