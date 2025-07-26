@@ -81,8 +81,14 @@ class PlaywrightFanzaScraper:
             await self._playwright.stop()
             self._playwright = None
 
-    async def get_high_rated_products(self, url: str = None, max_items: Optional[int] = None) -> List[Dict[str, any]]:
-        """高評価商品を取得（キャッシュ機能付き）"""
+    async def get_high_rated_products(self, url: str = None, max_items: Optional[int] = None, force_refresh: bool = False) -> List[Dict[str, any]]:
+        """高評価商品を取得（キャッシュ機能付き）
+        
+        Args:
+            url: スクレイピング対象のURL（省略時はデフォルトURL）
+            max_items: 最大取得件数
+            force_refresh: Trueの場合、キャッシュを無視して新規取得
+        """
         # URLが指定されていない場合はデフォルトURL
         if not url:
             url = FANZA_SALE_URL
@@ -90,11 +96,15 @@ class PlaywrightFanzaScraper:
         # URLベースのキャッシュキーを生成
         cache_key = self._generate_cache_key(url)
         
-        # キャッシュチェック
-        if cache_key in self.cache_timestamp_by_url and cache_key in self.cache_by_url:
-            if datetime.now() - self.cache_timestamp_by_url[cache_key] < timedelta(seconds=CACHE_DURATION):
-                logger.info(f"Returning cached data for URL: {url[:100]}...")
-                return self.cache_by_url[cache_key]
+        # force_refreshがFalseの場合のみキャッシュをチェック
+        if not force_refresh:
+            # キャッシュチェック
+            if cache_key in self.cache_timestamp_by_url and cache_key in self.cache_by_url:
+                if datetime.now() - self.cache_timestamp_by_url[cache_key] < timedelta(seconds=CACHE_DURATION):
+                    logger.info(f"Returning cached data for URL: {url[:100]}...")
+                    return self.cache_by_url[cache_key]
+        else:
+            logger.info(f"Force refresh enabled, bypassing cache for URL: {url[:100]}...")
         
         # 新規取得
         products = await self.scrape_products(url)
@@ -132,17 +142,15 @@ class PlaywrightFanzaScraper:
                 
                 # 商品リストの要素を直接待機（タイムアウト短縮）
                 try:
-                    await page.wait_for_selector("[data-e2eid='content-card'], li[class*='border border-gray-300']", timeout=10000)
+                    await page.wait_for_selector("[data-e2eid='content-card']", timeout=10000)
                 except:
                     logger.warning("Product selector not found within timeout")
-                    return []
                 
                 # 商品要素を探す（最初に見つかったセレクターを使用）
                 product_selectors = [
                     "[data-e2eid='content-card']",
-                    "li[class*='border border-gray-300']",
                     "div[data-e2eid='content-card']",
-                    "li:has(div[data-e2eid='content-card'])",
+                    "article[data-e2eid='content-card']"
                 ]
                 
                 product_elements = None
@@ -174,9 +182,17 @@ class PlaywrightFanzaScraper:
                 
                 # 結果を処理
                 for result in results:
-                    if isinstance(result, dict) and result.get('rating', 0) >= MIN_RATING:
-                        products.append(result)
-                        logger.info(f"Added product: {result['title'][:30]}... (Rating: {result['rating']})")
+                    if isinstance(result, dict) and result.get('title'):
+                        product_rating = result.get('rating', 0)
+                        logger.debug(f"Product: {result['title'][:30]}... Rating: {product_rating}")
+                        
+                        if product_rating >= MIN_RATING:
+                            products.append(result)
+                            logger.debug(f"Added product: {result['title'][:30]}... (Rating: {product_rating})")
+                        elif product_rating > 0:
+                            logger.debug(f"Product below threshold: {result['title'][:30]}... (Rating: {product_rating}, Min: {MIN_RATING})")
+                        else:
+                            logger.debug(f"Product with zero rating: {result['title'][:30]}...")
                 
             finally:
                 await page.close()
@@ -197,19 +213,28 @@ class PlaywrightFanzaScraper:
         try:
             # タイトル
             title = ""
-            title_selectors = [
-                "a[data-e2eid='title']",
-                "a[href*='/detail/']",
-                "span.hover\\:underline",
-                "a span.hover\\:underline"
-            ]
-            for selector in title_selectors:
-                title_elem = await element.query_selector(selector)
-                if title_elem:
-                    title = await title_elem.text_content()
-                    title = title.strip() if title else ""
-                    if title:
-                        break
+            # まず画像のaltタグから取得を試みる
+            title_img = await element.query_selector("a[href*='/detail/'] img")
+            if title_img:
+                title = await title_img.get_attribute('alt')
+                if title:
+                    title = title.strip()
+            
+            # altタグが空の場合は他のセレクターを試す
+            if not title:
+                title_selectors = [
+                    "a[data-e2eid='title']",
+                    "a[href*='/detail/']",
+                    "span.hover\\:underline",
+                    "a span.hover\\:underline"
+                ]
+                for selector in title_selectors:
+                    title_elem = await element.query_selector(selector)
+                    if title_elem:
+                        title = await title_elem.text_content()
+                        title = title.strip() if title else ""
+                        if title:
+                            break
             
             if not title:
                 return {}
@@ -224,11 +249,54 @@ class PlaywrightFanzaScraper:
                 if url and not url.startswith('http'):
                     url = f"https://www.dmm.co.jp{url}"
             
-            # 評価（星の画像の数をカウント）
+            # 評価（星の画像の数をカウント - 複数のセレクターを試行）
             rating = 0.0
-            star_images = await element.query_selector_all("img[src*='star/yellow']")
-            if star_images:
-                rating = len(star_images)
+            star_selectors = [
+                "img[src*='icon/star/yellow.svg']",  # 正確なセレクター
+                "img[src*='star/yellow']",
+                "img[src*='star'][alt='']",  # 空のaltタグの星画像
+                "img[alt*='星']",
+                "[class*='star']",
+                "[data-rating]",
+                ".star-rating img",
+                "img[src*='rating']"
+            ]
+            
+            for selector in star_selectors:
+                star_images = await element.query_selector_all(selector)
+                if star_images:
+                    rating = len(star_images)
+                    logger.debug(f"Found {rating} stars with selector: {selector}")
+                    break
+            
+            # 代替手段：評価テキストから抽出
+            if rating == 0.0:
+                rating_selectors = [
+                    "[class*='rating']",
+                    "[class*='review']",
+                    "span:has-text('★')",
+                    "*:has-text('評価')"
+                ]
+                for selector in rating_selectors:
+                    rating_elem = await element.query_selector(selector)
+                    if rating_elem:
+                        rating_text = await rating_elem.text_content()
+                        if rating_text:
+                            parsed_rating = self.parse_rating(rating_text)
+                            if parsed_rating > 0:
+                                rating = parsed_rating
+                                logger.debug(f"Found rating {rating} from text: {rating_text}")
+                                break
+            
+            # 評価が見つからない場合のデバッグ情報
+            if rating == 0.0:
+                logger.debug(f"No rating found for product: {title[:30]}...")
+                # デバッグ用：要素の内部HTMLを出力
+                try:
+                    inner_html = await element.inner_html()
+                    logger.debug(f"Element HTML preview: {inner_html[:500]}...")
+                except:
+                    pass
             
             # 価格
             price = "価格不明"
@@ -241,15 +309,16 @@ class PlaywrightFanzaScraper:
             # 商品画像URL（最初の有効なものを使用）
             image_url = ""
             image_selectors = [
-                "img[data-e2eid='content-image']",
-                "img[src*='pics.dmm.co.jp']",
-                "img[src*='dmm.com']"
+                "a[href*='/detail/'] img",  # 商品リンク内の画像
+                "picture img",              # picture要素内の画像
+                "img[loading='lazy']",      # 遅延読み込み画像
+                "img[alt]"                  # altタグがある画像
             ]
             for selector in image_selectors:
                 img_elem = await element.query_selector(selector)
                 if img_elem:
                     image_url = await img_elem.get_attribute('src')
-                    if image_url and ('dmm' in image_url or 'pics' in image_url):
+                    if image_url and ('awsimgsrc.dmm.co.jp' in image_url or 'pics.dmm.co.jp' in image_url):
                         # 高解像度版に変換
                         if 'ps.jpg' in image_url:
                             image_url = image_url.replace('ps.jpg', 'pl.jpg')
@@ -311,9 +380,9 @@ class FanzaScraper:
     def __init__(self):
         self.playwright_scraper = PlaywrightFanzaScraper()
     
-    async def get_high_rated_products(self, url: str = None, max_items: Optional[int] = None) -> List[Dict[str, any]]:
+    async def get_high_rated_products(self, url: str = None, max_items: Optional[int] = None, force_refresh: bool = False) -> List[Dict[str, any]]:
         """高評価商品を取得"""
-        return await self.playwright_scraper.get_high_rated_products(url=url, max_items=max_items)
+        return await self.playwright_scraper.get_high_rated_products(url=url, max_items=max_items, force_refresh=force_refresh)
     
     def format_rating_stars(self, rating: float) -> str:
         """評価を星マークで表現"""

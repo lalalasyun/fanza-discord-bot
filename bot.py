@@ -37,7 +37,7 @@ missav_scraper = MissAVScraper()
 user_last_command: Dict[int, datetime] = {}
 
 
-async def search_missav_for_product(product: dict) -> Optional[str]:
+async def search_missav_for_product(product: dict, force_refresh: bool = False) -> Optional[str]:
     """FANZA商品のタイトルでMissAVを検索してURLを取得"""
     try:
         # タイトルから不要な部分を削除して検索クエリを作成
@@ -53,7 +53,7 @@ async def search_missav_for_product(product: dict) -> Optional[str]:
             return None
         
         # MissAVで検索
-        videos = await missav_scraper.search_videos(title)
+        videos = await missav_scraper.search_videos(title, force_refresh=force_refresh)
         
         if videos and len(videos) > 0:
             # 最も関連性の高い動画のURLを返す
@@ -388,10 +388,17 @@ async def check_rate_limit_interaction(interaction: discord.Interaction) -> bool
         time_since_last = now - user_last_command[user_id]
         if time_since_last < timedelta(seconds=RATE_LIMIT_DURATION):
             remaining = RATE_LIMIT_DURATION - time_since_last.total_seconds()
-            await interaction.response.send_message(
-                f"レート制限中です。あと{remaining:.0f}秒お待ちください。", 
-                ephemeral=True
-            )
+            # interaction.responseが既に使われている場合はfollowupを使用
+            if interaction.response.is_done():
+                await interaction.followup.send(
+                    f"レート制限中です。あと{remaining:.0f}秒お待ちください。", 
+                    ephemeral=True
+                )
+            else:
+                await interaction.response.send_message(
+                    f"レート制限中です。あと{remaining:.0f}秒お待ちください。", 
+                    ephemeral=True
+                )
             return False
     
     user_last_command[user_id] = now
@@ -416,7 +423,7 @@ async def fanza_sale(ctx):
         
         # 各商品についてMissAVで検索（非同期で並列実行）
         async def add_missav_url(product):
-            missav_url = await search_missav_for_product(product)
+            missav_url = await search_missav_for_product(product, force_refresh=force_refresh)
             if missav_url:
                 product['missav_url'] = missav_url
             return product
@@ -466,7 +473,8 @@ async def fanza_sale(ctx):
     sort_type="ソート順: 評価順（デフォルト）、おすすめ順、人気順、売上順、新着順、お気に入り順",
     keyword="キーワード検索: 作品名、女優名などで絞り込み",
     release_filter="配信開始日: 全期間（デフォルト）、最新作、準新作",
-    count="表示件数: 1-10件（デフォルト: 5件）"
+    count="表示件数: 1-10件（デフォルト: 5件）",
+    force_refresh="キャッシュを無視して最新データを取得"
 )
 @app_commands.choices(
     mode=[
@@ -500,20 +508,20 @@ async def fanza_sale(ctx):
         app_commands.Choice(name="📺 準新作", value="recent"),
     ]
 )
-async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating", sale_type: str = "all", media_type: str = "all", sort_type: str = "review_rank", keyword: Optional[str] = None, release_filter: str = "all", count: app_commands.Range[int, 1, 10] = 5):
+async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating", sale_type: str = "all", media_type: str = "all", sort_type: str = "review_rank", keyword: Optional[str] = None, release_filter: str = "all", count: app_commands.Range[int, 1, 10] = 5, force_refresh: bool = False):
     """スラッシュコマンド版: FANZAのセール中高評価作品を表示"""
     
     # NSFWチェック
     if not await check_nsfw_interaction(interaction):
         return
     
-    # レート制限チェック
-    if not await check_rate_limit_interaction(interaction):
-        return
-    
     try:
         # 処理中メッセージ（defer で3秒の猶予を確保）
         await interaction.response.defer()
+        
+        # レート制限チェック（defer後に実行）
+        if not await check_rate_limit_interaction(interaction):
+            return
         
         # セールタイプ、メディアタイプ、ソート、キーワード、リリースフィルターに応じたURLを生成
         media_param = None if media_type == "all" else media_type
@@ -526,7 +534,7 @@ async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating
         )
         
         # 商品情報を取得
-        products = await scraper.get_high_rated_products(url=url)
+        products = await scraper.get_high_rated_products(url=url, force_refresh=force_refresh)
         
         if not products:
             media_text = {
@@ -539,7 +547,7 @@ async def slash_fanza_sale(interaction: discord.Interaction, mode: str = "rating
         
         # 各商品についてMissAVで検索（非同期で並列実行）
         async def add_missav_url(product):
-            missav_url = await search_missav_for_product(product)
+            missav_url = await search_missav_for_product(product, force_refresh=force_refresh)
             if missav_url:
                 product['missav_url'] = missav_url
             return product
@@ -892,8 +900,11 @@ class BotInfoView(View):
 
 
 @bot.tree.command(name="missav_search", description="🔍 MissAVで動画を検索して視聴URLを取得")
-@app_commands.describe(title="検索したい動画のタイトル")
-async def missav_search(interaction: discord.Interaction, title: str):
+@app_commands.describe(
+    title="検索したい動画のタイトル",
+    force_refresh="キャッシュを無視して最新データを取得"
+)
+async def missav_search(interaction: discord.Interaction, title: str, force_refresh: bool = False):
     """MissAV動画検索コマンド"""
     
     # NSFWチェック
@@ -913,7 +924,7 @@ async def missav_search(interaction: discord.Interaction, title: str):
         await interaction.response.defer()
         
         # MissAVで動画を検索
-        videos = await missav_scraper.search_videos(title.strip())
+        videos = await missav_scraper.search_videos(title.strip(), force_refresh=force_refresh)
         
         if not videos:
             await interaction.followup.send(f"❌ 「{title}」に関連する動画が見つかりませんでした。", ephemeral=True)

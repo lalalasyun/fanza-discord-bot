@@ -23,14 +23,24 @@ class MissAVScraper:
         self.cache = {}
         self.cache_timestamp = {}
 
-    async def search_videos(self, title: str) -> List[Dict[str, any]]:
-        """タイトルで動画を検索"""
+    async def search_videos(self, title: str, force_refresh: bool = False) -> List[Dict[str, any]]:
+        """タイトルで動画を検索
+        
+        Args:
+            title: 検索するタイトル
+            force_refresh: Trueの場合、キャッシュを無視して新規検索
+        """
         # キャッシュチェック
         cache_key = f"search_{title.lower()}"
-        if cache_key in self.cache_timestamp:
-            if datetime.now() - self.cache_timestamp[cache_key] < timedelta(seconds=CACHE_DURATION):
-                logger.info(f"Returning cached search results for: {title}")
-                return self.cache[cache_key]
+        
+        # force_refreshがFalseの場合のみキャッシュをチェック
+        if not force_refresh:
+            if cache_key in self.cache_timestamp:
+                if datetime.now() - self.cache_timestamp[cache_key] < timedelta(seconds=CACHE_DURATION):
+                    logger.info(f"Returning cached search results for: {title}")
+                    return self.cache[cache_key]
+        else:
+            logger.info(f"Force refresh enabled, bypassing cache for search: {title}")
 
         # 検索実行
         search_url = f"{MISSAV_BASE_URL}/ja/search/{quote(title)}"
